@@ -33,7 +33,7 @@ def setup_gpus():
     return()
     
 
-def load_data(pattern="vae_data/mariel_*.npy"):
+def load_data(pattern="data/mariel_*.npy"):
    # load up the six datasets, performing some minimal preprocessing beforehand
     datasets = {}
     ds_all = []
@@ -46,32 +46,26 @@ def load_data(pattern="vae_data/mariel_*.npy"):
         ds_name = os.path.basename(f)[7:-4]
         print("loading:", ds_name)
         ds = np.load(f).transpose((1,0,2))
-        ds = ds[500:-500, point_mask]
+        ds = ds[500:-500, point_mask] # Exclude 2 joints that are averages, and cut out the first & last 500 frames (which sometimes are completely static)
         print("\t Shape:", ds.shape)
-
-        ds[:,:,2] *= -1
-        print("\t Min:", np.min(ds,axis=(0,1)))
-        print("\t Max:", np.max(ds, axis=(0,1)))
-
-        #ds = filter_points(ds)
-
+        ds[:,:,2] *= -1 # Invert z direction
+#         print("\t Min:", np.min(ds,axis=(0,1)))
+#         print("\t Max:", np.max(ds, axis=(0,1)))
         datasets[ds_name] = ds
         ds_all.append(ds)
 
     ds_counts = np.array([ds.shape[0] for ds in ds_all])
     ds_offsets = np.zeros_like(ds_counts)
-    ds_offsets[1:] = np.cumsum(ds_counts[:-1])
+    ds_offsets[1:] = np.cumsum(ds_counts[:-1]) # starting timesteps of each separate capture session
 
     ds_all = np.concatenate(ds_all)
     print("Full data shape:", ds_all.shape)
-    # print("Offsets:", ds_offsets)
 
-    # print(ds_all.min(axis=(0,1)))
-    low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
+    low,hi = np.quantile(ds_all, [0,1], axis=(0,1))
     xy_min = min(low[:2])
     xy_max = max(hi[:2])
     xy_range = xy_max-xy_min
-    ds_all[:,:,:2] -= xy_min
+    ds_all[:,:,:2] -= xy_min # subtract the minimum from the x and y components
     ds_all *= 2/xy_range
     ds_all[:,:,:2] -= 1.0
 
@@ -89,8 +83,10 @@ def load_data(pattern="vae_data/mariel_*.npy"):
         datasets_centered[ds] = datasets[ds].copy()
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
 
-    # print(ds_all.min(axis=(0,1)))
-    low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
+    print("Full Data Min:", np.min(ds_all, axis=(0,1)))
+    print("Full Data Max:", np.max(ds_all, axis=(0,1)))    
+    print("Full (Centered) Data Min:", np.min(ds_all_centered, axis=(0,1)))
+    print("Full (Centered) Data Max:", np.max(ds_all_centered, axis=(0,1)))
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 
