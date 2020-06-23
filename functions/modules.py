@@ -5,21 +5,20 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
 from torch.nn import Parameter
 
-class MLP(torch.nn.Module):
-    """Fully-connected ReLU network with 1 hidden layer"""
-    def __init__(self, input_size, hidden_size, output_size, activation=ReLU()):
-        super(MLP, self).__init__()
-        self.input_size = input_size
+class MLPEncoder(torch.nn.Module):
+    """Encoder for fully-connected graph inputs"""
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim):
+        super(MLPEncoder, self).__init__()
+        self.node_features = node_features
+        self.edge_features = edge_features
         self.hidden_size  = hidden_size
-        self.output_size = output_size
-        self.layer_1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.layer_2 = torch.nn.Linear(self.hidden_size, self.output_size)
-        self.activation = activation
+        self.node_embedding_dim = node_embedding_dim
+        self.node_embedding = MLP(input_size = self.node_features, hidden_size = self.hidden_size, output_size = self.node_embedding_dim)
+        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, out_channels=self.node_embedding_dim, nn=MLP(self.edge_features, self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
+
     def forward(self, input):
-        hidden = self.layer_1(input)
-        hidden = self.activation(hidden)
-        hidden = self.layer_2(hidden)
-        output = self.activation(hidden)
+        hidden = self.node_embedding(input)
+        hidden = self.edge_embedding(hidden)
         return output
     
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
@@ -183,3 +182,19 @@ class NNConv(MessagePassing):
         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels,
                                    self.out_channels)
 
+class MLP(torch.nn.Module):
+    """Fully-connected ReLU network with 1 hidden layer"""
+    def __init__(self, input_size, hidden_size, output_size, activation=ReLU()):
+        super(MLP, self).__init__()
+        self.input_size = input_size
+        self.hidden_size  = hidden_size
+        self.output_size = output_size
+        self.layer_1 = torch.nn.Linear(self.input_size, self.hidden_size)
+        self.layer_2 = torch.nn.Linear(self.hidden_size, self.output_size)
+        self.activation = activation
+    def forward(self, input):
+        hidden = self.layer_1(input)
+        hidden = self.activation(hidden)
+        hidden = self.layer_2(hidden)
+        output = self.activation(hidden)
+        return output
