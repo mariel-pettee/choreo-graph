@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 plt.rcParams['animation.ffmpeg_path'] = '/workdisk/choreo-graph/ffmpeg' # for using html5 video in Jupyter notebook
 # print(matplotlib.animation.writers.list()) # check that ffmpeg is loaded. if it's not there, use .to_jshtml() instead of .to_html5_video().
 
+
 def load_data(pattern="data/mariel_*.npy"):
    # load up the six datasets, performing some minimal preprocessing beforehand
     datasets = {}

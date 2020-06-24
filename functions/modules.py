@@ -29,6 +29,7 @@ class MLPEncoder(torch.nn.Module):
             node_embedding = self.edge_embedding(node_embedding, data.edge_index, data.edge_attr)
         return node_embedding
 
+
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     r"""
     Args:
@@ -78,7 +79,6 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
 
     def forward(self, x, edge_index, edge_attr):
         """"""
-#         x, edge_index, edge_attr = input.x, input.edge_index, input.edge_attr
         x = x.unsqueeze(-1) if x.dim() == 1 else x
         pseudo = edge_attr.unsqueeze(-1) if edge_attr.dim() == 1 else edge_attr
         return self.propagate(edge_index, x=x, pseudo=pseudo)
