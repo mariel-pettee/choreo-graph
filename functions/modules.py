@@ -15,12 +15,13 @@ class MLPEncoder(torch.nn.Module):
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
         self.depth = depth
-        self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), ReLU(), Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
-        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim),ReLU())
-        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, out_channels=self.node_embedding_dim, 
-                                           nn=self.MLP
-#                                            nn=MLP(self.edge_features, self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim)
-                                          )
+        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+        self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), 
+                              ReLU(), 
+                              Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
+        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, 
+                                           out_channels=self.node_embedding_dim, 
+                                           nn=self.MLP)
 
     def forward(self, data):
         node_embedding = self.node_embedding(data.x)
