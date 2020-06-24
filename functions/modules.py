@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+import numpy as np
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
 import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import MessagePassing
@@ -20,7 +24,81 @@ class MLP(torch.nn.Module):
         hidden = self.layer_2(hidden)
         output = self.activation(hidden)
         return output
+<<<<<<< HEAD
 
+=======
+    
+class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
+    r"""
+    Args:
+        in_channels (int): Size of each input sample.
+        out_channels (int): Size of each output sample.
+        nn (torch.nn.Module): A neural network that
+            maps edge features :obj:`edge_attr` of shape :obj:`[-1,
+            num_edge_features]` to shape
+            :obj:`[-1, in_channels * out_channels]`, *e.g.*, defined by
+            :class:`torch.nn.Sequential`.
+        aggr (string, optional): The aggregation scheme to use
+            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
+            (default: :obj:`"add"`)
+        root_weight (bool, optional): If set to :obj:`False`, the layer will
+            not add the transformed root node features to the output.
+            (default: :obj:`True`)
+        bias (bool, optional): If set to :obj:`False`, the layer will not learn
+            an additive bias. (default: :obj:`True`)
+        **kwargs (optional): Additional arguments of
+            :class:`torch_geometric.nn.conv.MessagePassing`.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 nn,
+                 aggr='add',
+                 root_weight=True,
+                 bias=True,
+                 **kwargs):
+        super(MLPGraphConv, self).__init__(aggr=aggr, **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.nn = nn
+        self.aggr = aggr
+
+        if root_weight:
+            self.root = Parameter(torch.Tensor(in_channels, out_channels))
+        else:
+            self.register_parameter('root', None)
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+    def forward(self, x, edge_index, edge_attr):
+        """"""
+        x = x.unsqueeze(-1) if x.dim() == 1 else x
+        pseudo = edge_attr.unsqueeze(-1) if edge_attr.dim() == 1 else edge_attr
+        return self.propagate(edge_index, x=x, pseudo=pseudo)
+
+    def message(self, x_i, x_j, pseudo):
+        node_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
+        weight = self.nn(pseudo)
+        weight = weight.view(node_features.shape[0], node_features.shape[1], self.out_channels)
+        return torch.matmul(node_features.unsqueeze(1), weight).squeeze(1)
+
+    def update(self, aggr_out, x):
+        if self.root is not None:
+            aggr_out = aggr_out + torch.mm(x, self.root)
+        if self.bias is not None:
+            aggr_out = aggr_out + self.bias
+        return aggr_out
+
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
+
+    
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
 class NNConv(MessagePassing):
     r"""The continuous kernel-based convolutional operator from the
     `"Neural Message Passing for Quantum Chemistry"
@@ -97,7 +175,10 @@ class NNConv(MessagePassing):
         pseudo = edge_attr.unsqueeze(-1) if edge_attr.dim() == 1 else edge_attr
         return self.propagate(edge_index, x=x, pseudo=pseudo)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
     def message(self, x_j, pseudo):
         weight = self.nn(pseudo).view(-1, self.in_channels, self.out_channels)
         return torch.matmul(x_j.unsqueeze(1), weight).squeeze(1)
@@ -113,6 +194,7 @@ class NNConv(MessagePassing):
         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels,
                                    self.out_channels)
 
+<<<<<<< HEAD
 
 class EdgeConv(MessagePassing):
     def __init__(self, in_channels, out_channels):
@@ -191,3 +273,5 @@ class GCNConv(MessagePassing):
         # Step 6: Return new node embeddings.
         return aggr_out
     
+=======
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89

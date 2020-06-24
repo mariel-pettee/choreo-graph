@@ -17,10 +17,19 @@ class MarielDataset(torch.utils.data.Dataset):
         self.n_joints       = 53
         self.n_dim          = 3
         
+<<<<<<< HEAD
         if self.overlap == True:
             print("\nGenerating overlapping sequences...")
         else:
             print("\nGenerating non-overlapping sequences...")   
+=======
+        print("")
+        
+        if self.overlap == True:
+            print("Generating overlapping sequences...")
+        else:
+            print("Generating non-overlapping sequences...")   
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
         
         if self.xy_centering == True: 
             print("Using (x,y)-centering...")
@@ -48,7 +57,11 @@ class MarielDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         'Generates one sample of data'  
+<<<<<<< HEAD
         edge_index, is_skeleton_edge, reduced_joint_indices = edges(n_joints=self.n_joints)
+=======
+        edge_index, is_skeleton_edge, reduced_joint_indices = edges(reduced_joints=self.reduced_joints, seq_len=self.seq_len)
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
         
         if self.xy_centering == True: 
             data = self.data[1] # choose index 1, for the (x,y)-centered phrases
@@ -97,7 +110,10 @@ def load_data(pattern="data/mariel_*.npy"):
     ds_offsets[1:] = np.cumsum(ds_counts[:-1])
 
     ds_all = np.concatenate(ds_all)
+<<<<<<< HEAD
 #     print("Full data shape:", ds_all.shape)
+=======
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
     print("Original numpy dataset contains {:,} timesteps of {} joints with {} dimensions each.".format(ds_all.shape[0], ds_all.shape[1], ds_all.shape[2]))
 
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
@@ -125,6 +141,7 @@ def load_data(pattern="data/mariel_*.npy"):
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
+<<<<<<< HEAD
 def edges(n_joints = 53):
     all_edges = [(i,j) for i in range(n_joints) for j in range(n_joints)]
     all_edges_reversed = [(i,j) for i in range(n_joints) for j in range(n_joints)]
@@ -132,6 +149,10 @@ def edges(n_joints = 53):
 
     ### PS: See http://www.cs.uu.nl/docs/vakken/mcanim/mocap-manual/site/img/markers.png for detailed marker definitions
     
+=======
+def edges(reduced_joints, seq_len):
+    ### PS: See http://www.cs.uu.nl/docs/vakken/mcanim/mocap-manual/site/img/markers.png for detailed marker definitions
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
     point_labels=['ARIEL','C7','CLAV','LANK','LBHD','LBSH','LBWT','LELB','LFHD',
               'LFRM','LFSH','LFWT','LHEL','LIEL','LIHAND','LIWR','LKNE','LKNI',
               'LMT1','LMT5','LOHAND','LOWR','LSHN','LTHI','LTOE','LUPA','MBWT',
@@ -143,6 +164,20 @@ def edges(n_joints = 53):
     reduced_joint_names = ['ARIEL', 'CLAV', 'RFSH', 'LFSH', 'RIEL', 'LIEL', 'RIWR', 'LIWR','RKNE','LKNE','RTOE','LTOE','LHEL','RHEL','RFWT','LFWT','LBWT','RBWT']
     reduced_joint_indices = [point_labels.index(joint_name) for joint_name in reduced_joint_names]
     
+<<<<<<< HEAD
+=======
+    all_edges = [(i,j) for i in range(53) for j in range(53)]
+    all_edges_reversed = [(i,j) for i in range(53) for j in range(53)]
+    
+    if reduced_joints == True:
+        reduced_edges = [(i,j) for i in reduced_joint_indices for j in reduced_joint_indices]
+        reduced_edges_reversed = [(j,i) for i in reduced_joint_indices for j in reduced_joint_indices]
+        edge_index = np.row_stack([reduced_edges,reduced_edges_reversed])
+    else:
+        edge_index = np.row_stack([all_edges,all_edges_reversed])
+        
+        
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
     skeleton_lines = [
     #     ( (start group), (end group) ),
         (('LHEL',), ('LTOE',)), # toe to heel
@@ -211,12 +246,33 @@ def edges(n_joints = 53):
         entry.append([point_labels.index(l) for l in g1][0])
         entry.append([point_labels.index(l) for l in g2][0])
         skeleton_idxs.append(entry)
+<<<<<<< HEAD
 
     is_skeleton_edge = []
     for edge in np.arange(2*n_joints**2): 
+=======
+        
+    is_skeleton_edge = []      
+    for edge in np.arange(edge_index.shape[0]): 
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
         if [edge_index[edge][0],edge_index[edge][1]] in skeleton_idxs: 
             is_skeleton_edge.append(torch.tensor(1.0))
         else:
             is_skeleton_edge.append(torch.tensor(0.0))
+<<<<<<< HEAD
     
     return torch.tensor(edge_index, dtype=torch.long), is_skeleton_edge, reduced_joint_indices
+=======
+
+    is_skeleton_edge = np.array(is_skeleton_edge)
+    copies = np.tile(is_skeleton_edge, (seq_len,1)) # create copies of the 1D array for every timestep
+    skeleton_edges_over_time = torch.tensor(np.transpose(copies))
+    
+    if reduced_joints == True: 
+        ### Need to remake these lists to include only nodes 0-18 now
+        reduced_edges = [(i,j) for i in np.arange(len(reduced_joint_indices)) for j in np.arange(len(reduced_joint_indices))]
+        reduced_edges_reversed = [(j,i) for i in np.arange(len(reduced_joint_indices)) for j in np.arange(len(reduced_joint_indices))]
+        edge_index = np.row_stack([reduced_edges,reduced_edges_reversed])
+    
+    return torch.tensor(edge_index, dtype=torch.long), skeleton_edges_over_time, reduced_joint_indices
+>>>>>>> d7f95637d5b500c545114bbdcf8305cb07c60e89
