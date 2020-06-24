@@ -5,22 +5,29 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
 from torch.nn import Parameter
 
+
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim):
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, depth):
         super(MLPEncoder, self).__init__()
         self.node_features = node_features
         self.edge_features = edge_features
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
-        self.node_embedding = MLP(input_size = self.node_features, hidden_size = self.hidden_size, output_size = self.node_embedding_dim)
-        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, out_channels=self.node_embedding_dim, nn=MLP(self.edge_features, self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
+        self.depth = depth
+        self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), ReLU(), Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
+        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim),ReLU())
+        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, out_channels=self.node_embedding_dim, 
+                                           nn=self.MLP
+#                                            nn=MLP(self.edge_features, self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim)
+                                          )
 
-    def forward(self, input):
-        hidden = self.node_embedding(input)
-        hidden = self.edge_embedding(hidden)
-        return output
-    
+    def forward(self, data):
+        node_embedding = self.node_embedding(data.x)
+        for layer in range(self.depth):
+            node_embedding = self.edge_embedding(node_embedding, data.edge_index, data.edge_attr)
+        return node_embedding
+
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     r"""
     Args:
@@ -70,6 +77,7 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
 
     def forward(self, x, edge_index, edge_attr):
         """"""
+#         x, edge_index, edge_attr = input.x, input.edge_index, input.edge_attr
         x = x.unsqueeze(-1) if x.dim() == 1 else x
         pseudo = edge_attr.unsqueeze(-1) if edge_attr.dim() == 1 else edge_attr
         return self.propagate(edge_index, x=x, pseudo=pseudo)
