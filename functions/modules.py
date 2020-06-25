@@ -3,30 +3,34 @@ import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
-from torch.nn import Parameter
+from torch.nn import Parameter, ModuleList
 
 
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, depth):
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim):
         super(MLPEncoder, self).__init__()
         self.node_features = node_features
         self.edge_features = edge_features
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
-        self.depth = depth
         self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
         self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), 
                               ReLU(), 
                               Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
-        self.edge_embedding = MLPGraphConv(in_channels=self.node_embedding_dim, 
+        self.graph_conv_1 = MLPGraphConv(in_channels=self.node_embedding_dim, 
                                            out_channels=self.node_embedding_dim, 
                                            nn=self.MLP)
+        self.graph_conv_2 = MLPGraphConv(in_channels=self.node_embedding_dim, 
+                                           out_channels=self.node_embedding_dim, 
+                                           nn=self.MLP)
+        
+        self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
 
     def forward(self, data):
         node_embedding = self.node_embedding(data.x)
-        for layer in range(self.depth):
-            node_embedding = self.edge_embedding(node_embedding, data.edge_index, data.edge_attr)
+        for layer in self.graph_conv_list:
+            node_embedding = layer(node_embedding, data.edge_index, data.edge_attr)
         return node_embedding
 
 
