@@ -38,10 +38,10 @@ class MLPEncoder(torch.nn.Module):
 #             print(node_embedding[0,0])
         return node_embedding, data.edge_index, data.edge_attr
 
-class MLPDecoder(torch.nn.Module):
+class RNNDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
     def __init__(self, input_size, hidden_size, output_size, edge_features, edge_embedding_dim):
-        super(MLPDecoder, self).__init__()
+        super(RNNDecoder, self).__init__()
         self.input_size = input_size
         self.hidden_size  = hidden_size
         self.output_size = output_size
