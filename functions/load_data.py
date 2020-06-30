@@ -6,7 +6,7 @@ import os
 
 class MarielDataset(torch.utils.data.Dataset):
     'Characterizes a dataset for PyTorch'
-    def __init__(self, reduced_joints=False, xy_centering=True, seq_len=128, file_path="data/mariel_*.npy", n_joints=53, overlap=True):
+    def __init__(self, reduced_joints=False, xy_centering=True, seq_len=128, file_path="data/mariel_*.npy", overlap=True):
         'Initialization'
         self.file_path      = file_path
         self.seq_len        = seq_len
