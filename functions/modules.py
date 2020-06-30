@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.nn import Sequential, Linear, ReLU
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import MessagePassing, GatedGraphConv
 from torch_geometric.utils import add_self_loops, degree
 from torch.nn import Parameter, ModuleList
 
@@ -28,12 +28,38 @@ class MLPEncoder(torch.nn.Module):
         self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
 
     def forward(self, data):
+#         print("Initial data shape: {} | First element: {}".format(data.x.shape, data.x[0][:3]))
+#         print("Input data mean = {:.5f} & std = {:.5f}".format(torch.mean(data.x), torch.std(data.x)))
+#         print("Input data max = {:.5f} & min = {:.5f}".format(torch.max(data.x), torch.min(data.x)))
         node_embedding = self.node_embedding(data.x)
+#         print("Shape after node embedding: {} | First element: {}".format(node_embedding.shape, node_embedding[0][0:3]))
         for layer in self.graph_conv_list:
             node_embedding = layer(node_embedding, data.edge_index, data.edge_attr)
+#             print(node_embedding[0,0])
+        return node_embedding, data.edge_index, data.edge_attr
+
+class MLPDecoder(torch.nn.Module):
+    """Decoder from graph to predicted positions"""
+    def __init__(self, input_size, hidden_size, output_size, edge_features, edge_embedding_dim):
+        super(MLPDecoder, self).__init__()
+        self.input_size = input_size
+        self.hidden_size  = hidden_size
+        self.output_size = output_size
+        self.edge_features = edge_features
+        self.edge_embedding_dim = edge_embedding_dim
+        self.node_embedding = Sequential(Linear(self.input_size, self.output_size), ReLU())
+        self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
+        self.graph_conv_1 = GatedGraphConv(out_channels=self.output_size, num_layers=2)
+        self.graph_conv_2 = GatedGraphConv(out_channels=self.output_size, num_layers=2)
+        self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
+
+    def forward(self, x, edge_index, edge_attr, z_soft):
+        node_embedding = self.node_embedding(x)
+        edge_embedding = z_soft*self.edge_embedding(edge_attr)
+        for layer in self.graph_conv_list:
+            node_embedding = layer(node_embedding, edge_index, edge_weight=None)
         return node_embedding
-
-
+    
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     r"""
     Args:

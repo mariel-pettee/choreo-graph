@@ -124,6 +124,12 @@ def load_data(pattern="data/mariel_*.npy"):
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
 
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
+    
+    ### OPTIONAL RESCALING FOR DEBUGGING GNN
+#     from sklearn.preprocessing import MinMaxScaler
+#     scaler = MinMaxScaler()
+#     ds_all_centered = scaler.fit_transform(ds_all_centered.reshape(-1, ds_all_centered.shape[-1])).reshape(ds_all_centered.shape)
+        
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 def edges(reduced_joints, seq_len):
