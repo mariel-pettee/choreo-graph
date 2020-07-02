@@ -6,6 +6,29 @@ from torch_geometric.utils import add_self_loops, degree
 from torch.nn import Parameter, ModuleList
 from torch.autograd import Variable
 import torch.nn.functional as F
+import pdb
+import math
+
+def uniform(size, tensor):
+    bound = 1.0 / math.sqrt(size)
+    if tensor is not None:
+        tensor.data.uniform_(-bound, bound)
+
+def zeros(tensor):
+    if tensor is not None:
+        tensor.data.fill_(0)
+        
+def reset(nn):
+    def _reset(item):
+        if hasattr(item, 'reset_parameters'):
+            item.reset_parameters()
+
+    if nn is not None:
+        if hasattr(nn, 'children') and len(list(nn.children())) > 0:
+            for item in nn.children():
+                _reset(item)
+        else:
+            _reset(nn)
 
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
@@ -16,17 +39,18 @@ class MLPEncoder(torch.nn.Module):
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
-        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU(),Linear(self.node_embedding_dim, self.node_embedding_dim), ReLU(),Linear(self.node_embedding_dim, self.node_embedding_dim), ReLU(),Linear(self.node_embedding_dim, self.node_embedding_dim), ReLU(),Linear(self.node_embedding_dim, self.node_embedding_dim), ReLU())
+#         self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+        self.node_embedding = Sequential(Linear(self.node_features, int(self.node_features/2)), ReLU(),Linear(int(self.node_features/2), int(self.node_features/3)), ReLU(),Linear(int(self.node_features/3), int(self.node_features/4)), ReLU(),Linear(int(self.node_features/4), int(self.node_features/5)), ReLU(),Linear(int(self.node_features/5), self.node_embedding_dim), ReLU())
         self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
         self.MLP = Sequential(Linear(self.edge_embedding_dim, self.hidden_size), 
                               ReLU(), 
                               Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
         self.graph_conv_1 = MLPGraphConv(in_channels=self.node_embedding_dim, 
                                            out_channels=self.node_embedding_dim, 
-                                           nn=self.MLP)
+                                           nn=self.MLP, root_weight=True, bias=True, aggr='add')
         self.graph_conv_2 = MLPGraphConv(in_channels=self.node_embedding_dim, 
                                            out_channels=self.node_embedding_dim, 
-                                           nn=self.MLP)
+                                           nn=self.MLP, root_weight=True, bias=True, aggr='add')
         
         self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
 
@@ -35,24 +59,24 @@ class MLPEncoder(torch.nn.Module):
         edge_embedding = self.edge_embedding(data.edge_attr)
         for layer in self.graph_conv_list:
             node_embedding = layer(node_embedding, data.edge_index, edge_embedding)
-        return node_embedding, data.edge_index, edge_embedding
+        return node_embedding, data.edge_index, edge_embedding, F.log_softmax(edge_embedding, dim=-1)
 
 class RNNDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, input_size, hidden_size, output_size, edge_embedding_dim, num_layers):
+    def __init__(self, input_size, output_size, edge_embedding_dim, edge_features, num_layers):
         super(RNNDecoder, self).__init__()
         self.input_size = input_size
-        self.hidden_size  = hidden_size
         self.output_size = output_size
+        self.edge_features = edge_features
         self.edge_embedding_dim = edge_embedding_dim
         self.num_layers = num_layers
         self.node_transform = Sequential(Linear(self.input_size, self.output_size), ReLU())
 #         self.edge_transform = Sequential(Linear(self.edge_embedding_dim, self.edge_features), ReLU())
         self.graph_conv = GatedGraphConv(out_channels=self.output_size, num_layers=self.num_layers)
 
-    def forward(self, x, edge_index, edge_attr, z_soft):
+    def forward(self, x, edge_index, edge_attr, z):
         node_features = self.node_transform(x)
-        edge_attr = z_soft*edge_attr
+        edge_attr = z*edge_attr
         node_features = self.graph_conv(node_features, edge_index, edge_weight=None)
         return node_features
     
@@ -103,6 +127,14 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
         else:
             self.register_parameter('bias', None)
 
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        reset(self.nn)
+        if self.root is not None:
+            uniform(self.root.size(0), self.root)
+        zeros(self.bias)
+            
     def forward(self, x, edge_index, edge_attr):
         """"""
         x = x.unsqueeze(-1) if x.dim() == 1 else x
@@ -125,19 +157,19 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
 
-class MLP(torch.nn.Module):
-    """Fully-connected ReLU network with 1 hidden layer"""
-    def __init__(self, input_size, hidden_size, output_size, activation=ReLU()):
-        super(MLP, self).__init__()
-        self.input_size = input_size
-        self.hidden_size  = hidden_size
-        self.output_size = output_size
-        self.layer_1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.layer_2 = torch.nn.Linear(self.hidden_size, self.output_size)
-        self.activation = activation
-    def forward(self, input):
-        hidden = self.layer_1(input)
-        hidden = self.activation(hidden)
-        hidden = self.layer_2(hidden)
-        output = self.activation(hidden)
-        return output
+# class MLP(torch.nn.Module):
+#     """Fully-connected ReLU network with 1 hidden layer"""
+#     def __init__(self, input_size, hidden_size, output_size, activation=ReLU()):
+#         super(MLP, self).__init__()
+#         self.input_size = input_size
+#         self.hidden_size  = hidden_size
+#         self.output_size = output_size
+#         self.layer_1 = torch.nn.Linear(self.input_size, self.hidden_size)
+#         self.layer_2 = torch.nn.Linear(self.hidden_size, self.output_size)
+#         self.activation = activation
+#     def forward(self, input):
+#         hidden = self.layer_1(input)
+#         hidden = self.activation(hidden)
+#         hidden = self.layer_2(hidden)
+#         output = self.activation(hidden)
+#         return output
