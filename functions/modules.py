@@ -39,8 +39,8 @@ class MLPEncoder(torch.nn.Module):
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
-#         self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
-        self.node_embedding = Sequential(Linear(self.node_features, int(self.node_features/2)), ReLU(),Linear(int(self.node_features/2), int(self.node_features/3)), ReLU(),Linear(int(self.node_features/3), int(self.node_features/4)), ReLU(),Linear(int(self.node_features/4), int(self.node_features/5)), ReLU(),Linear(int(self.node_features/5), self.node_embedding_dim), ReLU())
+        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+#         self.node_embedding = Sequential(Linear(self.node_features, int(self.node_features/2)), ReLU(),Linear(int(self.node_features/2), int(self.node_features/3)), ReLU(),Linear(int(self.node_features/3), int(self.node_features/4)), ReLU(),Linear(int(self.node_features/4), int(self.node_features/5)), ReLU(),Linear(int(self.node_features/5), self.node_embedding_dim), ReLU())
         self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
         self.MLP = Sequential(Linear(self.edge_embedding_dim, self.hidden_size), 
                               ReLU(), 
