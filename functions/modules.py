@@ -71,13 +71,16 @@ class RNNDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.num_layers = num_layers
         self.node_transform = Sequential(Linear(self.input_size, self.output_size), ReLU())
-#         self.edge_transform = Sequential(Linear(self.edge_embedding_dim, self.edge_features), ReLU())
+        self.edge_transform = Sequential(Linear(self.edge_embedding_dim, self.edge_features), ReLU())
+        self.edge_transform_list = ModuleList([self.edge_transform for _ in range(edge_embedding_dim)])
         self.graph_conv = GatedGraphConv(out_channels=self.output_size, num_layers=self.num_layers)
 
     def forward(self, x, edge_index, edge_attr, z):
         node_features = self.node_transform(x)
-        edge_attr = z*edge_attr
-        node_features = self.graph_conv(node_features, edge_index, edge_weight=None)
+        edge_weight = torch.sum(z*edge_attr, axis=1)
+#         for i in range(edge_embedding_dim):
+#             edge_weight[i]
+        node_features = self.graph_conv(node_features, edge_index, edge_weight=edge_weight)
         return node_features
     
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
