@@ -130,12 +130,7 @@ def load_data(pattern="data/mariel_*.npy"):
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
 
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
-    
-    ### OPTIONAL RESCALING FOR DEBUGGING GNN
-#     from sklearn.preprocessing import MinMaxScaler
-#     scaler = MinMaxScaler()
-#     ds_all_centered = scaler.fit_transform(ds_all_centered.reshape(-1, ds_all_centered.shape[-1])).reshape(ds_all_centered.shape)
-        
+
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 def edges(reduced_joints, seq_len):
@@ -150,7 +145,7 @@ def edges(reduced_joints, seq_len):
     ### Define a subset of joints if we want to train on fewer joints that still capture meaningful body movement:
     reduced_joint_names = ['ARIEL', 'CLAV', 'RFSH', 'LFSH', 'RIEL', 'LIEL', 'RIWR', 'LIWR','RKNE','LKNE','RTOE','LTOE','LHEL','RHEL','RFWT','LFWT','LBWT','RBWT']
     reduced_joint_indices = [point_labels.index(joint_name) for joint_name in reduced_joint_names]
-    
+
     all_edges = [(i,j) for i in range(53) for j in range(53)]
     all_edges_reversed = [(i,j) for i in range(53) for j in range(53)]
     
@@ -160,8 +155,7 @@ def edges(reduced_joints, seq_len):
         edge_index = np.row_stack([reduced_edges,reduced_edges_reversed])
     else:
         edge_index = np.row_stack([all_edges,all_edges_reversed])
-        
-        
+
     skeleton_lines = [
     #     ( (start group), (end group) ),
         (('LHEL',), ('LTOE',)), # toe to heel
@@ -237,7 +231,7 @@ def edges(reduced_joints, seq_len):
             is_skeleton_edge.append(torch.tensor(1.0))
         else:
             is_skeleton_edge.append(torch.tensor(0.0))
-
+    
     is_skeleton_edge = np.array(is_skeleton_edge)
     copies = np.tile(is_skeleton_edge, (seq_len,1)) # create copies of the 1D array for every timestep
     skeleton_edges_over_time = torch.tensor(np.transpose(copies))
