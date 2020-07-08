@@ -6,7 +6,7 @@ import os
 
 class MarielDataset(torch.utils.data.Dataset):
     'Characterizes a dataset for PyTorch'
-    def __init__(self, reduced_joints=False, xy_centering=True, seq_len=128, file_path="data/mariel_*.npy", overlap=True):
+    def __init__(self, reduced_joints=False, xy_centering=True, seq_len=128, predicted_timesteps=1, file_path="data/mariel_*.npy", overlap=True):
         'Initialization'
         self.file_path      = file_path
         self.seq_len        = seq_len
@@ -16,6 +16,7 @@ class MarielDataset(torch.utils.data.Dataset):
         self.xy_centering   = xy_centering
         self.n_joints       = 53
         self.n_dim          = 3
+        self.predicted_timesteps = predicted_timesteps
         
 <<<<<<< HEAD
         if self.overlap == True:
@@ -74,19 +75,24 @@ class MarielDataset(torch.utils.data.Dataset):
         if self.overlap == True:  
             # non-overlapping phrases
             sequence = data[index:index+self.seq_len]
+            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
         else: 
             # overlapping phrases
             index = index*self.seq_len
             sequence = data[index:index+self.seq_len]
+            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
 
         sequence = np.transpose(sequence, [1,0,2]) # put n_joints first
         sequence = sequence.reshape((data.shape[1],self.n_dim*self.seq_len)) # flatten n_dim*seq_len into one dimension (i.e. node feature)
+        prediction_target = np.transpose(prediction_target, [1,0,2]) # put n_joints first
+        prediction_target = prediction_target.reshape((data.shape[1],self.n_dim*self.predicted_timesteps)) # flatten n_dim*predicted_timesteps into one dimension (i.e. node feature) per node (data.shape[1] = number of nodes)
 
         # Convert to torch objects
         sequence = torch.Tensor(sequence)
+        prediction_target = torch.Tensor(prediction_target)
         edge_attr = torch.Tensor(is_skeleton_edge)
         
-        return Data(x=sequence, y=sequence, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
+        return Data(x=sequence, y=prediction_target, edge_index=edge_index.t().contiguous(), edge_attr=edge_attr)
 
 def load_data(pattern="data/mariel_*.npy"):
    # load up the six datasets, performing some minimal preprocessing beforehand
@@ -139,6 +145,12 @@ def load_data(pattern="data/mariel_*.npy"):
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
 
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
+    
+    ### OPTIONAL RESCALING FOR DEBUGGING GNN
+#     from sklearn.preprocessing import MinMaxScaler
+#     scaler = MinMaxScaler()
+#     ds_all_centered = scaler.fit_transform(ds_all_centered.reshape(-1, ds_all_centered.shape[-1])).reshape(ds_all_centered.shape)
+        
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 <<<<<<< HEAD
