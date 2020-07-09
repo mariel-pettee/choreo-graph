@@ -13,9 +13,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import pdb
-from torchsummary import summary
 import os 
 import argparse
+import pickle
+import json
 
 from functions.load_data import MarielDataset, edges
 from functions.functions import *
@@ -33,10 +34,25 @@ parser.add_argument('--reduced_joints', action='store_true', default=False, help
 args = parser.parse_args()
 print(args)
 
+if args.reduced_joints: 
+    n_joints = 18
+else:
+    n_joints = 53
+
+save_folder = os.path.join("logs",args.name+"_{}joints_seqlen{}_pred{}".format(n_joints, args.seq_len, args.predicted_timesteps))
+if not os.path.exists(save_folder): 
+    os.makedirs(save_folder)
+checkpoint_path = os.path.join(save_folder,"checkpoint.pth")
+log_file = os.path.join(save_folder, 'log.txt')
+log = open(log_file, 'w')
+print(args, file=log)
+print("Save folder: {}".format(save_folder), file=log)
+log.flush()
+
 ### LOAD DATA
 data = MarielDataset(seq_len=args.seq_len, reduced_joints=args.reduced_joints, predicted_timesteps=args.predicted_timesteps)
 dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True)
-print("\nGenerated {:,} batches of shape: {}".format(len(dataloader), data[0]))
+print("\nGenerated {:,} batches of shape: {}".format(len(dataloader), data[0]), file=log)
 
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
@@ -46,21 +62,6 @@ edge_embedding_dim = 4 # number of edge types
 hidden_size = 50
 num_layers = 2
 checkpoint_loaded = False 
-if args.reduced_joints: 
-    n_joints = 18
-else:
-    n_joints = 53
-
-
-# checkpoint_path = "weights/checkpoint_{}joints_seqlen{}_pred{}.pth".format(data[0].num_nodes, args.seq_len, args.predicted_timesteps)
-save_folder = os.path.join("logs",args.name+"_{}joints_seqlen{}_pred{}".format(data[0].num_nodes, args.seq_len, args.predicted_timesteps))
-print("Saving to {}".format(save_folder))
-os.makedirs(save_folder)
-checkpoint_path = os.path.join(save_folder,"checkpoint.pth")
-log_file = os.path.join(save_folder, 'log.txt')
-log = open(log_file, 'w')
-print(args, file=log)
-log.flush()
 
 model = VAE(node_features=node_features, 
             edge_features=edge_features, 
@@ -74,20 +75,22 @@ model = VAE(node_features=node_features,
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-4, weight_decay=5e-4)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("Using {}".format(device))
+print("\nUsing {}".format(device), file=log)
 model = model.to(device)
-print(model)
-print("Total trainable parameters: {:,}".format(count_parameters(model)))
+print(model, file=log)
+print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
+log.flush()
 
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):
-    print("Loading saved checkpoint from {}...".format(checkpoint_path))
+    print("Loading saved checkpoint from {}...".format(checkpoint_path), file=log)
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
+    log.flush()
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
@@ -133,7 +136,7 @@ def train(epochs):
             average_loss += batch_loss.item()
 
             i += 1
-            if args.batch_limit > 0: if i >= args.batch_limit: break # temporary -- for stopping training early
+            if (args.batch_limit > 0) and (i >= args.batch_limit): break # temporary -- for stopping training early
                 
         inputs.append(torch.stack(batch_inputs))
         outputs.append(torch.stack(batch_outputs))
@@ -148,7 +151,9 @@ def train(epochs):
         print("epoch : {}/{} | Loss = {:,.4f} | Reconstruction Loss: {:,.4f} | Prediction Loss: {:,.4f}".format(epoch+1, epochs, 
                                                                                                                 average_loss,
                                                                                                                 average_reconstruction_loss, 
-                                                                                                                average_prediction_loss))
+                                                                                                                average_prediction_loss),
+                                                                                                                file=log)
+        log.flush()
         
         if epoch == 0 and not checkpoint_loaded: best_loss = average_loss
         elif epoch == 0 and checkpoint_loaded: best_loss = min(average_loss, loss_checkpoint)
@@ -161,10 +166,25 @@ def train(epochs):
              'optimizer_state_dict': optimizer.state_dict(),
              'loss': best_loss,
              }, checkpoint_path)
-            print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path))
+            print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
+            log.flush()
     return losses, reconstruction_losses, prediction_losses, inputs, outputs
 
 losses, reconstruction_losses, prediction_losses, inputs, outputs = train(epochs=args.epochs)
+
+loss_dict = {
+	"overall_losses": losses,
+	"reconstruction_losses": reconstruction_losses,
+	"prediction_losses": prediction_losses,
+			}
+
+with open(os.path.join(save_folder,'losses.json'), 'w') as f:
+    json.dump(loss_dict, f)
+
+with open(os.path.join(args.save_folder,"test_inputs.pkl"), "wb") as f:
+    pickle.dump(inputs,f)
+with open(os.path.join(args.save_folder,"test_outputs.pkl"), "wb") as f:
+    pickle.dump(outputs,f)
 
 ### MAKE PLOTS
 fig, ax = plt.subplots(figsize=(8,6))
