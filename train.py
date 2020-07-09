@@ -17,6 +17,7 @@ import os
 import argparse
 import pickle
 import json
+import time
 
 from functions.load_data import MarielDataset, edges
 from functions.functions import *
@@ -42,7 +43,7 @@ else:
 save_folder = os.path.join("logs",args.name+"_{}joints_seqlen{}_pred{}".format(n_joints, args.seq_len, args.predicted_timesteps))
 if not os.path.exists(save_folder): 
     os.makedirs(save_folder)
-checkpoint_path = os.path.join(save_folder,"checkpoint.pth")
+checkpoint_path = os.path.join(save_folder,"best_weights.pth")
 log_file = os.path.join(save_folder, 'log.txt')
 log = open(log_file, 'w')
 print(args, file=log)
@@ -98,13 +99,14 @@ prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the predi
 sigma = 0.001 # how to pick sigma?
 
 def train(epochs):
+    t = time.time()
     losses = []
     reconstruction_losses = []
     prediction_losses = []
     inputs = []
     outputs = []
     model.train()
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         average_loss = 0
         average_reconstruction_loss = 0
         average_prediction_loss = 0
@@ -148,10 +150,11 @@ def train(epochs):
         losses.append(average_loss) 
         reconstruction_losses.append(average_reconstruction_loss)
         prediction_losses.append(average_prediction_loss)
-        print("epoch : {}/{} | Loss = {:,.4f} | Reconstruction Loss: {:,.4f} | Prediction Loss: {:,.4f}".format(epoch+1, epochs, 
+        print("epoch : {}/{} | Loss = {:,.4f} | Reconstruction Loss: {:,.4f} | Prediction Loss: {:,.4f}, Time: {:.4f} sec".format(epoch+1, epochs, 
                                                                                                                 average_loss,
                                                                                                                 average_reconstruction_loss, 
-                                                                                                                average_prediction_loss),
+                                                                                                                average_prediction_loss,
+                                                                                                                time.time() - t),
                                                                                                                 file=log)
         log.flush()
         
@@ -181,10 +184,13 @@ loss_dict = {
 with open(os.path.join(save_folder,'losses.json'), 'w') as f:
     json.dump(loss_dict, f)
 
-with open(os.path.join(args.save_folder,"test_inputs.pkl"), "wb") as f:
-    pickle.dump(inputs,f)
-with open(os.path.join(args.save_folder,"test_outputs.pkl"), "wb") as f:
-    pickle.dump(outputs,f)
+inputs = inputs[0].cpu().detach().numpy()
+outputs = outputs[0].cpu().detach().numpy()
+
+with open(os.path.join(save_folder,"train_inputs.npy"), "wb") as f:
+    np.save(f, inputs)
+with open(os.path.join(save_folder,"train_outputs.npy"), "wb") as f:
+    np.save(f, outputs)
 
 ### MAKE PLOTS
 fig, ax = plt.subplots(figsize=(8,6))
@@ -197,17 +203,13 @@ ax.legend(fontsize=14)
 plt.savefig(os.path.join(save_folder,"losses.jpg"))
 
 ### LOOK AT PREDICTIONS
-input = inputs[0]
-input = input.cpu().detach().numpy()
-first_input_batch = input[0]
+first_input_batch = inputs[0]
 first_input_seq = first_input_batch[:n_joints, :]
 
 # reshape to be n_joints x n_timesteps x n_dim
 first_input_seq = first_input_seq.reshape((n_joints,args.seq_len,3))
 
-pred = outputs[0]
-pred = pred.cpu().detach().numpy() # convert to numpy
-first_predicted_batch = pred[0]
+first_predicted_batch = outputs[0]
 first_predicted_seq = first_predicted_batch[:n_joints, :]
 
 # reshape to be n_joints x n_timesteps x n_dim
