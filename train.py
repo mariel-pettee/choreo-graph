@@ -85,13 +85,13 @@ log.flush()
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):
     print("Loading saved checkpoint from {}...".format(checkpoint_path), file=log)
+    log.flush()
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
-    log.flush()
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')

@@ -12,10 +12,10 @@ spec:
   - name: nri-train
     command: ["python", "-u", "train.py", 
     # "--name=vae"
-    "--epochs=5",
+    "--epochs=100",
     "--predicted_timesteps=0",
     # "--reduced_joints",
-    "--batch_limit=2",
+    # "--batch_limit=2",
     ]
     # command: ["sleep", "infinity"]
     image: amr-registry.caas.intel.com/aipg/mpettee-pytorch-geometric
