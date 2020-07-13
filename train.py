@@ -171,7 +171,7 @@ def train(epochs):
              }, checkpoint_path)
             print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
             log.flush()
-    return losses, reconstruction_losses, prediction_losses#, inputs, outputs
+    return losses, reconstruction_losses, prediction_losses
 
 losses, reconstruction_losses, prediction_losses = train(epochs=args.epochs)
 
