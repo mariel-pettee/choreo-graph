@@ -99,7 +99,6 @@ prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the predi
 sigma = 0.001 # how to pick sigma?
 
 def train(epochs):
-    t = time.time()
     losses = []
     reconstruction_losses = []
     prediction_losses = []
@@ -107,6 +106,7 @@ def train(epochs):
     outputs = []
     model.train()
     for epoch in tqdm(range(epochs)):
+        t = time.time()
         average_loss = 0
         average_reconstruction_loss = 0
         average_prediction_loss = 0
@@ -120,8 +120,8 @@ def train(epochs):
             
             ### CALCULATE MODEL OUTPUTS
             output = model(batch)
-            batch_inputs.append(batch.x)
-            batch_outputs.append(output)
+#             batch_inputs.append(batch.x)
+#             batch_outputs.append(output)
             
             ### CALCULATE LOSS
             reconstruction_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps
@@ -140,8 +140,8 @@ def train(epochs):
             i += 1
             if (args.batch_limit > 0) and (i >= args.batch_limit): break # temporary -- for stopping training early
                 
-        inputs.append(torch.stack(batch_inputs))
-        outputs.append(torch.stack(batch_outputs))
+#         inputs.append(torch.stack(batch_inputs))
+#         outputs.append(torch.stack(batch_outputs))
         
         average_loss = average_loss / i # use len(dataloader) for full batches
         average_reconstruction_loss = average_reconstruction_loss / i # use len(dataloader) for full batches
@@ -171,9 +171,9 @@ def train(epochs):
              }, checkpoint_path)
             print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
             log.flush()
-    return losses, reconstruction_losses, prediction_losses, inputs, outputs
+    return losses, reconstruction_losses, prediction_losses#, inputs, outputs
 
-losses, reconstruction_losses, prediction_losses, inputs, outputs = train(epochs=args.epochs)
+losses, reconstruction_losses, prediction_losses = train(epochs=args.epochs)
 
 loss_dict = {
 	"overall_losses": losses,
@@ -187,10 +187,10 @@ with open(os.path.join(save_folder,'losses.json'), 'w') as f:
 inputs = inputs[0].cpu().detach().numpy()
 outputs = outputs[0].cpu().detach().numpy()
 
-with open(os.path.join(save_folder,"train_inputs.npy"), "wb") as f:
-    np.save(f, inputs)
-with open(os.path.join(save_folder,"train_outputs.npy"), "wb") as f:
-    np.save(f, outputs)
+# with open(os.path.join(save_folder,"train_inputs.npy"), "wb") as f:
+#     np.save(f, inputs)
+# with open(os.path.join(save_folder,"train_outputs.npy"), "wb") as f:
+#     np.save(f, outputs)
 
 ### MAKE PLOTS
 fig, ax = plt.subplots(figsize=(8,6))
@@ -202,26 +202,26 @@ plt.yticks(fontsize=14)
 ax.legend(fontsize=14)
 plt.savefig(os.path.join(save_folder,"losses.jpg"))
 
-### LOOK AT PREDICTIONS
-first_input_batch = inputs[0]
-first_input_seq = first_input_batch[:n_joints, :]
+# ### LOOK AT PREDICTIONS
+# first_input_batch = inputs[0]
+# first_input_seq = first_input_batch[:n_joints, :]
 
-# reshape to be n_joints x n_timesteps x n_dim
-first_input_seq = first_input_seq.reshape((n_joints,args.seq_len,3))
+# # reshape to be n_joints x n_timesteps x n_dim
+# first_input_seq = first_input_seq.reshape((n_joints,args.seq_len,3))
 
-first_predicted_batch = outputs[0]
-first_predicted_seq = first_predicted_batch[:n_joints, :]
+# first_predicted_batch = outputs[0]
+# first_predicted_seq = first_predicted_batch[:n_joints, :]
 
-# reshape to be n_joints x n_timesteps x n_dim
-first_predicted_seq = first_predicted_seq.reshape((n_joints,args.seq_len,3))
+# # reshape to be n_joints x n_timesteps x n_dim
+# first_predicted_seq = first_predicted_seq.reshape((n_joints,args.seq_len,3))
 
-plt.figure(figsize=(10,7))
-for joint in range(1): # first few joints
-# for joint in range(first_seq.shape[0]): # all joints
-    # plot x & y for the sequence
-    plt.plot(first_input_seq[joint,:,0], first_input_seq[joint,:,1], 'o--', label="Input Joint "+str(joint)) 
-    plt.plot(first_predicted_seq[joint,:,0], first_predicted_seq[joint,:,1], 'o--', label="Predicted Joint "+str(joint)) 
-plt.xticks(fontsize=14)
-plt.yticks(fontsize=14)
-plt.legend(fontsize=12)
-plt.savefig(os.path.join(save_folder,"predictions_joint0.jpg"))
+# plt.figure(figsize=(10,7))
+# for joint in range(1): # first few joints
+# # for joint in range(first_seq.shape[0]): # all joints
+#     # plot x & y for the sequence
+#     plt.plot(first_input_seq[joint,:,0], first_input_seq[joint,:,1], 'o--', label="Input Joint "+str(joint)) 
+#     plt.plot(first_predicted_seq[joint,:,0], first_predicted_seq[joint,:,1], 'o--', label="Predicted Joint "+str(joint)) 
+# plt.xticks(fontsize=14)
+# plt.yticks(fontsize=14)
+# plt.legend(fontsize=12)
+# plt.savefig(os.path.join(save_folder,"predictions_joint0.jpg"))
