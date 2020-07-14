@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: vae-train-53joints-
+  generateName: vae-trainvaltest-nooverlap-53joints-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,9 +11,10 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    # "--name=vae"
+    "--name=vae_trainvaltestnooverlap-",
     "--epochs=100",
     "--predicted_timesteps=0",
+    "--no_overlap",
     # "--reduced_joints",
     # "--batch_limit=2",
     ]

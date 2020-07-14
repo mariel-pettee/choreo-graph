@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, SequentialSampler
 from torch.utils.data.dataset import TensorDataset
 from torch.distributions.multivariate_normal import MultivariateNormal
 import torch.nn.functional as F
@@ -23,7 +23,6 @@ from functions.load_data import MarielDataset, edges
 from functions.functions import *
 from functions.modules import *
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default="vae", help='Distinguishing prefix for save directory.')
 parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train.')
@@ -32,6 +31,7 @@ parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
+parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
 args = parser.parse_args()
 print(args)
 
@@ -51,9 +51,20 @@ print("Save folder: {}".format(save_folder), file=log)
 log.flush()
 
 ### LOAD DATA
-data = MarielDataset(seq_len=args.seq_len, reduced_joints=args.reduced_joints, predicted_timesteps=args.predicted_timesteps)
-dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True)
-print("\nGenerated {:,} batches of shape: {}".format(len(dataloader), data[0]), file=log)
+data = MarielDataset(seq_len=args.seq_len, reduced_joints=args.reduced_joints, predicted_timesteps=args.predicted_timesteps, no_overlap=args.no_overlap)
+train_indices = np.arange(int(0.7*len(data))) # 70% split for training data, no shuffle
+val_indices = np.arange(int(0.7*len(data)),int(0.85*len(data))) # next 15% on validation
+test_indices = np.arange(int(0.85*len(data)), len(data)) # last 15% on test
+
+dataloader_train = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(train_indices))
+dataloader_val = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(val_indices))
+dataloader_test = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(test_indices))
+
+torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
+torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
+torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
+
+print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]))
 
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
@@ -99,70 +110,112 @@ prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the predi
 sigma = 0.001 # how to pick sigma?
 
 def train(epochs):
-    losses = []
-    reconstruction_losses = []
-    prediction_losses = []
-    inputs = []
-    outputs = []
-    model.train()
+    train_losses = []
+    train_reco_losses = []
+    train_pred_losses = []
+    val_losses = []
+    val_reco_losses = []
+    val_pred_losses = []
     for epoch in tqdm(range(epochs)):
+        model.train()
         t = time.time()
-        average_loss = 0
-        average_reconstruction_loss = 0
-        average_prediction_loss = 0
-        i = 0
-        batch_inputs = []
-        batch_outputs = []
+        n_batches = 0
+        total_train_loss = 0
+        total_train_reco_loss = 0
+        total_train_pred_loss = 0
+        total_val_loss = 0
+        total_val_reco_loss = 0
+        total_val_pred_loss = 0
         
-        for batch in tqdm(dataloader, desc="Batches"):
+        ### TRAINING LOOP
+        for batch in tqdm(dataloader_train, desc="Training batches"):
             batch = batch.to(device)
-            optimizer.zero_grad() # reset the gradients to zero
             
             ### CALCULATE MODEL OUTPUTS
             output = model(batch)
-#             batch_inputs.append(batch.x)
-#             batch_outputs.append(output)
             
             ### CALCULATE LOSS
-            reconstruction_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps
-            average_reconstruction_loss += reconstruction_loss.item()
-            batch_loss = reconstruction_loss
+            train_reco_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps.item()
             if args.predicted_timesteps > 0: 
-                prediction_loss = mse_loss(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
-                batch_loss += prediction_to_reconstruction_loss_ratio*prediction_loss
-                average_prediction_loss += prediction_loss.item()
+                train_pred_loss = prediction_to_reconstruction_loss_ratio*mse_loss(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
+                train_loss = train_reco_loss + train_pred_loss
+            else:
+                train_loss = train_reco_loss
+
+            ### ADD LOSSES TO TOTALS
+            total_train_loss += train_loss.item()
+            total_train_reco_loss += train_reco_loss.item()
+            if args.predicted_timesteps > 0: 
+                total_train_pred_loss += train_pred_loss.item()
 
             ### BACKPROPAGATE
-            batch_loss.backward()
+            optimizer.zero_grad() # reset the gradients to zero
+            train_loss.backward()
             optimizer.step()
-            average_loss += batch_loss.item()
 
-            i += 1
-            if (args.batch_limit > 0) and (i >= args.batch_limit): break # temporary -- for stopping training early
-                
-#         inputs.append(torch.stack(batch_inputs))
-#         outputs.append(torch.stack(batch_outputs))
+            ### OPTIONAL -- STOP TRAINING EARLY
+            n_batches += 1
+            if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # temporary -- for stopping training early
         
-        average_loss = average_loss / i # use len(dataloader) for full batches
-        average_reconstruction_loss = average_reconstruction_loss / i # use len(dataloader) for full batches
-        average_prediction_loss = average_prediction_loss / i # use len(dataloader) for full batches
+        ### VALIDATION LOOP
+        model.eval()
+        for batch in tqdm(dataloader_val, desc="Validation batches"):
+            batch = batch.to(device)
+            
+            ### CALCULATE MODEL OUTPUTS
+            output = model(batch)
+            
+            ### CALCULATE LOSS
+            val_reco_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps.item()
+            if args.predicted_timesteps > 0: 
+                val_pred_loss = prediction_to_reconstruction_loss_ratio*mse_loss(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
+                val_loss = val_reco_loss + val_pred_loss
+            else:
+                val_loss = val_reco_loss
 
-        losses.append(average_loss) 
-        reconstruction_losses.append(average_reconstruction_loss)
-        prediction_losses.append(average_prediction_loss)
-        print("epoch : {}/{} | Loss = {:,.4f} | Reconstruction Loss: {:,.4f} | Prediction Loss: {:,.4f}, Time: {:.4f} sec".format(epoch+1, epochs, 
-                                                                                                                average_loss,
-                                                                                                                average_reconstruction_loss, 
-                                                                                                                average_prediction_loss,
+            ### ADD LOSSES TO TOTALS
+            total_val_loss += val_loss.item()
+            total_val_reco_loss += val_reco_loss.item()
+            if args.predicted_timesteps > 0: 
+                total_val_pred_loss += val_pred_loss.item()
+
+            ### OPTIONAL -- STOP TRAINING EARLY
+            n_batches += 1
+            if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # temporary -- for stopping training early
+        
+        ### CALCULATE AVERAGE LOSSES PER EPOCH   
+        epoch_train_loss = total_train_loss / n_batches
+        epoch_train_reco_loss = total_train_reco_loss / n_batches
+        epoch_train_pred_loss = total_train_pred_loss / n_batches
+
+        train_losses.append(epoch_train_loss) 
+        train_reco_losses.append(epoch_train_reco_loss)
+        train_pred_losses.append(epoch_train_pred_loss)
+
+        epoch_val_loss = total_val_loss / n_batches
+        epoch_val_reco_loss = total_val_reco_loss / n_batches
+        epoch_val_pred_loss = total_val_pred_loss / n_batches
+
+        val_losses.append(epoch_val_loss) 
+        val_reco_losses.append(epoch_val_reco_loss)
+        val_pred_losses.append(epoch_val_pred_loss)
+
+        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} |time: {:.4f} sec".format(epoch+1, epochs, 
+                                                                                                                epoch_train_loss,
+                                                                                                                epoch_train_reco_loss, 
+                                                                                                                epoch_train_pred_loss,
+                                                                                                                epoch_val_loss,
+                                                                                                                epoch_val_reco_loss, 
+                                                                                                                epoch_val_pred_loss,
                                                                                                                 time.time() - t),
                                                                                                                 file=log)
         log.flush()
         
-        if epoch == 0 and not checkpoint_loaded: best_loss = average_loss
-        elif epoch == 0 and checkpoint_loaded: best_loss = min(average_loss, loss_checkpoint)
+        if epoch == 0 and not checkpoint_loaded: best_loss = epoch_val_loss
+        elif epoch == 0 and checkpoint_loaded: best_loss = min(epoch_val_loss, loss_checkpoint)
             
-        if average_loss < best_loss:
-            best_loss = average_loss
+        if epoch_val_loss < best_loss:
+            best_loss = epoch_val_loss
             torch.save({
              'epoch': epoch,
              'model_state_dict': model.state_dict(),
@@ -171,57 +224,19 @@ def train(epochs):
              }, checkpoint_path)
             print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
             log.flush()
-    return losses, reconstruction_losses, prediction_losses
 
-losses, reconstruction_losses, prediction_losses = train(epochs=args.epochs)
-
-loss_dict = {
-	"overall_losses": losses,
-	"reconstruction_losses": reconstruction_losses,
-	"prediction_losses": prediction_losses,
+    loss_dict = {
+	"train_losses": train_losses,
+	"train_reco_losses": train_reco_losses,
+	"train_pred_losses": train_pred_losses,
+	"val_losses": val_losses,
+	"val_reco_losses": val_reco_losses,
+	"val_pred_losses": val_pred_losses,
 			}
 
-with open(os.path.join(save_folder,'losses.json'), 'w') as f:
-    json.dump(loss_dict, f)
+    with open(os.path.join(save_folder,'losses.json'), 'w') as f:
+	    json.dump(loss_dict, f)
 
-inputs = inputs[0].cpu().detach().numpy()
-outputs = outputs[0].cpu().detach().numpy()
+train(epochs=args.epochs)
 
-# with open(os.path.join(save_folder,"train_inputs.npy"), "wb") as f:
-#     np.save(f, inputs)
-# with open(os.path.join(save_folder,"train_outputs.npy"), "wb") as f:
-#     np.save(f, outputs)
 
-### MAKE PLOTS
-fig, ax = plt.subplots(figsize=(8,6))
-ax.plot(np.arange(len(losses)), reconstruction_losses, label="Reconstruction")
-ax.set_xlabel("Epoch", fontsize=16)
-ax.set_ylabel("Loss", fontsize=16)
-plt.xticks(fontsize=14)
-plt.yticks(fontsize=14)
-ax.legend(fontsize=14)
-plt.savefig(os.path.join(save_folder,"losses.jpg"))
-
-# ### LOOK AT PREDICTIONS
-# first_input_batch = inputs[0]
-# first_input_seq = first_input_batch[:n_joints, :]
-
-# # reshape to be n_joints x n_timesteps x n_dim
-# first_input_seq = first_input_seq.reshape((n_joints,args.seq_len,3))
-
-# first_predicted_batch = outputs[0]
-# first_predicted_seq = first_predicted_batch[:n_joints, :]
-
-# # reshape to be n_joints x n_timesteps x n_dim
-# first_predicted_seq = first_predicted_seq.reshape((n_joints,args.seq_len,3))
-
-# plt.figure(figsize=(10,7))
-# for joint in range(1): # first few joints
-# # for joint in range(first_seq.shape[0]): # all joints
-#     # plot x & y for the sequence
-#     plt.plot(first_input_seq[joint,:,0], first_input_seq[joint,:,1], 'o--', label="Input Joint "+str(joint)) 
-#     plt.plot(first_predicted_seq[joint,:,0], first_predicted_seq[joint,:,1], 'o--', label="Predicted Joint "+str(joint)) 
-# plt.xticks(fontsize=14)
-# plt.yticks(fontsize=14)
-# plt.legend(fontsize=12)
-# plt.savefig(os.path.join(save_folder,"predictions_joint0.jpg"))
