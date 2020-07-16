@@ -69,10 +69,10 @@ print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_tra
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
-node_embedding_dim = 25
+node_embedding_dim = 40
 edge_embedding_dim = 4 # number of edge types
-hidden_size = 50
-num_layers = 2
+hidden_size = 515
+num_layers = 4
 checkpoint_loaded = False 
 
 model = VAE(node_features=node_features, 
@@ -116,7 +116,7 @@ def train(epochs):
     val_losses = []
     val_reco_losses = []
     val_pred_losses = []
-    for epoch in tqdm(range(epochs)):
+    for epoch in range(epochs):
         model.train()
         t = time.time()
         n_batches = 0
@@ -128,7 +128,7 @@ def train(epochs):
         total_val_pred_loss = 0
         
         ### TRAINING LOOP
-        for batch in tqdm(dataloader_train, desc="Training batches"):
+        for batch in dataloader_train:
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
@@ -159,7 +159,7 @@ def train(epochs):
         
         ### VALIDATION LOOP
         model.eval()
-        for batch in tqdm(dataloader_val, desc="Validation batches"):
+        for batch in dataloader_val:
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
