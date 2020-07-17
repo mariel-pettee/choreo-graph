@@ -6,29 +6,37 @@ from torch_geometric.utils import add_self_loops, degree
 from torch.nn import Parameter, ModuleList
 from torch.autograd import Variable
 import torch.nn.functional as F
-import pdb
-import math
+from .functions import *
 
-def uniform(size, tensor):
-    bound = 1.0 / math.sqrt(size)
-    if tensor is not None:
-        tensor.data.uniform_(-bound, bound)
+class VAE(torch.nn.Module):
+    """Graph Variational Autoencoder"""
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers):
+        super(VAE, self).__init__()
+        self.node_features = node_features
+        self.node_embedding_dim = node_embedding_dim
+        self.edge_features = edge_features
+        self.edge_embedding_dim = edge_embedding_dim
+        self.hidden_size = hidden_size
+        self.input_size = input_size
+        self.output_size = output_size
+        self.num_layers = num_layers
+        self.encoder = MLPEncoder(
+            node_features=self.node_features, 
+            edge_features=self.edge_features, 
+            hidden_size=self.hidden_size, 
+            node_embedding_dim=self.node_embedding_dim,
+            edge_embedding_dim=self.edge_embedding_dim)
+        self.decoder = RNNDecoder(
+            input_size=self.node_embedding_dim, 
+            output_size=self.output_size,
+            edge_embedding_dim=self.edge_embedding_dim,
+            num_layers=self.num_layers)
 
-def zeros(tensor):
-    if tensor is not None:
-        tensor.data.fill_(0)
-        
-def reset(nn):
-    def _reset(item):
-        if hasattr(item, 'reset_parameters'):
-            item.reset_parameters()
-
-    if nn is not None:
-        if hasattr(nn, 'children') and len(list(nn.children())) > 0:
-            for item in nn.children():
-                _reset(item)
-        else:
-            _reset(nn)
+    def forward(self, batch):
+        node_embedding, edge_index, edge_embedding, log_probabilities = self.encoder(batch)
+        z = torch.nn.functional.gumbel_softmax(log_probabilities, tau=0.5)
+        output = self.decoder(node_embedding, edge_index, edge_embedding, z)
+        return output
 
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
@@ -63,23 +71,18 @@ class MLPEncoder(torch.nn.Module):
 
 class RNNDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, input_size, output_size, edge_embedding_dim, edge_features, num_layers):
+    def __init__(self, input_size, output_size, edge_embedding_dim, num_layers):
         super(RNNDecoder, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.edge_features = edge_features
         self.edge_embedding_dim = edge_embedding_dim
         self.num_layers = num_layers
         self.node_transform = Sequential(Linear(self.input_size, self.output_size), ReLU())
-        self.edge_transform = Sequential(Linear(self.edge_embedding_dim, self.edge_features), ReLU())
-        self.edge_transform_list = ModuleList([self.edge_transform for _ in range(edge_embedding_dim)])
         self.graph_conv = GatedGraphConv(out_channels=self.output_size, num_layers=self.num_layers)
 
     def forward(self, x, edge_index, edge_attr, z):
         node_features = self.node_transform(x)
         edge_weight = torch.sum(z*edge_attr, axis=1)
-#         for i in range(edge_embedding_dim):
-#             edge_weight[i]
         node_features = self.graph_conv(node_features, edge_index, edge_weight=edge_weight)
         return node_features
     
@@ -160,19 +163,3 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
 
-# class MLP(torch.nn.Module):
-#     """Fully-connected ReLU network with 1 hidden layer"""
-#     def __init__(self, input_size, hidden_size, output_size, activation=ReLU()):
-#         super(MLP, self).__init__()
-#         self.input_size = input_size
-#         self.hidden_size  = hidden_size
-#         self.output_size = output_size
-#         self.layer_1 = torch.nn.Linear(self.input_size, self.hidden_size)
-#         self.layer_2 = torch.nn.Linear(self.hidden_size, self.output_size)
-#         self.activation = activation
-#     def forward(self, input):
-#         hidden = self.layer_1(input)
-#         hidden = self.activation(hidden)
-#         hidden = self.layer_2(hidden)
-#         output = self.activation(hidden)
-#         return output

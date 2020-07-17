@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: vae-moreparams-
+  labels:
+    type: interactive
+    research-group: rl-team
+spec:
+  hostIPC: true
+  restartPolicy: Never
+  containers:
+  - name: nri-train
+    command: ["python", "-u", "train.py", 
+    "--name=vae_moreparams",
+    "--epochs=100",
+    "--predicted_timesteps=0",
+    # "--no_overlap",
+    # "--reduced_joints",
+    # "--batch_limit=2",
+    ]
+    # command: ["sleep", "infinity"]
+    image: amr-registry.caas.intel.com/aipg/mpettee-pytorch-geometric
+    workingDir: /workspace/choreo-graph/
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+        cpu: 1
+        memory: 32Gi
+    volumeMounts:
+    - mountPath: "/workspace"
+      name: workspace 
+    envFrom:
+    - configMapRef:
+        name: proxy-config
+    env:
+    - name: LD_LIBRARY_PATH
+      value: $LD_LIBRARY_PATH:/.mujoco/mjpro150/bin
+    - name: OMP_NUM_THREADS
+      value: "1"
+  securityContext:
+    fsGroup: 17685
+    runAsUser: 11964579
+  volumes:
+  - name: workspace
+    persistentVolumeClaim:
+      claimName: workdisk
+
