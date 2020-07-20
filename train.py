@@ -27,6 +27,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default="vae", help='Distinguishing prefix for save directory.')
 parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train.')
 parser.add_argument('--batch_size', type=int, default=32, help='Number of sequences per batch.')
+parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for training.')
 parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps per sequence.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
@@ -85,7 +86,7 @@ model = VAE(node_features=node_features,
             output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
 
-optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-4, weight_decay=5e-4)
+optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("\nUsing {}".format(device), file=log)
 model = model.to(device)
@@ -107,7 +108,7 @@ if os.path.isfile(checkpoint_path):
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
 prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the prediction loss higher to help it compete with the larger prediction seq_len
-sigma = 0.001 # how to pick sigma?
+# sigma = 0.001 # how to pick sigma?
 
 def train(epochs):
     train_losses = []
