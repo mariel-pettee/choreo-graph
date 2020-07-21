@@ -29,10 +29,16 @@ parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to
 parser.add_argument('--batch_size', type=int, default=32, help='Number of sequences per batch.')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for training.')
 parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps per sequence.')
+parser.add_argument('--node_embedding_dim', type=int, default=64, help='Node embedding size.')
+parser.add_argument('--edge_embedding_dim', type=int, default=32, help='Edge embedding size (i.e. number of edge types).')
+parser.add_argument('--hidden_size', type=int, default=64, help='Number of timesteps per sequence.')
+parser.add_argument('--num_layers', type=int, default=3, help='Number of recurrent layers in decoder.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
+parser.add_argument('--sampling', action='store_true', default=False, help="Enables sampling step between encoder & decoder.")
+parser.add_argument('--recurrent', action='store_true', default=False, help="Enables recurrent decoder.")
 args = parser.parse_args()
 print(args)
 
@@ -70,10 +76,10 @@ print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_tra
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
-node_embedding_dim = 40
-edge_embedding_dim = 4 # number of edge types
-hidden_size = 515
-num_layers = 4
+node_embedding_dim = args.node_embedding_dim
+edge_embedding_dim = args.edge_embedding_dim # number of edge types
+hidden_size = args.hidden_size
+num_layers = args.num_layers
 checkpoint_loaded = False 
 
 model = VAE(node_features=node_features, 
@@ -84,6 +90,8 @@ model = VAE(node_features=node_features,
             num_layers=num_layers,
             input_size=node_embedding_dim, 
             output_size=node_features+args.predicted_timesteps*data.n_dim,
+            sampling=args.sampling, 
+            recurrent=args.recurrent,
            )
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
@@ -108,9 +116,8 @@ if os.path.isfile(checkpoint_path):
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
 prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the prediction loss higher to help it compete with the larger prediction seq_len
-# sigma = 0.001 # how to pick sigma?
 
-def train(epochs):
+def train_model(epochs):
     train_losses = []
     train_reco_losses = []
     train_pred_losses = []
@@ -238,6 +245,6 @@ def train(epochs):
     with open(os.path.join(save_folder,'losses.json'), 'w') as f:
 	    json.dump(loss_dict, f)
 
-train(epochs=args.epochs)
+train_model(epochs=args.epochs)
 
 

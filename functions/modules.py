@@ -10,7 +10,7 @@ from .functions import *
 
 class VAE(torch.nn.Module):
     """Graph Variational Autoencoder"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers):
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers, sampling, recurrent):
         super(VAE, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
@@ -20,17 +20,23 @@ class VAE(torch.nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         self.num_layers = num_layers
+        self.sampling = sampling
+        self.recurrent = recurrent
         self.encoder = MLPEncoder(
             node_features=self.node_features, 
             edge_features=self.edge_features, 
             hidden_size=self.hidden_size, 
             node_embedding_dim=self.node_embedding_dim,
             edge_embedding_dim=self.edge_embedding_dim)
-        self.decoder = RNNDecoder(
+        self.decoder = Decoder(
             input_size=self.node_embedding_dim, 
             output_size=self.output_size,
+            num_layers=self.num_layers,
             edge_embedding_dim=self.edge_embedding_dim,
-            num_layers=self.num_layers)
+            hidden_size=self.hidden_size,
+            sampling=self.sampling,
+            recurrent=self.recurrent,
+        )
 
     def forward(self, batch):
         node_embedding, edge_index, edge_embedding, log_probabilities = self.encoder(batch)
@@ -48,9 +54,8 @@ class MLPEncoder(torch.nn.Module):
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
         self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
-#         self.node_embedding = Sequential(Linear(self.node_features, int(self.node_features/2)), ReLU(),Linear(int(self.node_features/2), int(self.node_features/3)), ReLU(),Linear(int(self.node_features/3), int(self.node_features/4)), ReLU(),Linear(int(self.node_features/4), int(self.node_features/5)), ReLU(),Linear(int(self.node_features/5), self.node_embedding_dim), ReLU())
         self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
-        self.MLP = Sequential(Linear(self.edge_embedding_dim, self.hidden_size), 
+        self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), 
                               ReLU(), 
                               Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
         self.graph_conv_1 = MLPGraphConv(in_channels=self.node_embedding_dim, 
@@ -59,31 +64,58 @@ class MLPEncoder(torch.nn.Module):
         self.graph_conv_2 = MLPGraphConv(in_channels=self.node_embedding_dim, 
                                            out_channels=self.node_embedding_dim, 
                                            nn=self.MLP, root_weight=True, bias=True, aggr='add')
-        
         self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
 
     def forward(self, data):
         node_embedding = self.node_embedding(data.x)
-        edge_embedding = self.edge_embedding(data.edge_attr)
         for layer in self.graph_conv_list:
-            node_embedding = layer(node_embedding, data.edge_index, edge_embedding)
+            node_embedding = layer(node_embedding, data.edge_index, data.edge_attr)
+        edge_embedding = self.edge_embedding(data.edge_attr)
         return node_embedding, data.edge_index, edge_embedding, F.log_softmax(edge_embedding, dim=-1)
 
-class RNNDecoder(torch.nn.Module):
+class Decoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, input_size, output_size, edge_embedding_dim, num_layers):
-        super(RNNDecoder, self).__init__()
+    def __init__(self, input_size, hidden_size, output_size, num_layers, edge_embedding_dim, sampling, recurrent):
+        super(Decoder, self).__init__()
         self.input_size = input_size
+        self.hidden_size = hidden_size
         self.output_size = output_size
-        self.edge_embedding_dim = edge_embedding_dim
         self.num_layers = num_layers
+        self.edge_embedding_dim = edge_embedding_dim
+        self.sampling = sampling
+        self.recurrent = recurrent
         self.node_transform = Sequential(Linear(self.input_size, self.output_size), ReLU())
-        self.graph_conv = GatedGraphConv(out_channels=self.output_size, num_layers=self.num_layers)
+        if self.recurrent == True:
+            self.rnn_graph_conv = GatedGraphConv(out_channels=self.input_size, num_layers=self.num_layers)
+        else: 
+            self.MLP = Sequential(Linear(self.edge_embedding_dim, self.hidden_size), 
+                                  ReLU(), 
+                                  Linear(self.hidden_size, 2*self.input_size*self.input_size))
+            self.graph_conv_1 = MLPGraphConv(in_channels=self.input_size, 
+                                               out_channels=self.input_size, 
+                                               nn=self.MLP, root_weight=True, bias=True, aggr='add')
+            self.graph_conv_2 = MLPGraphConv(in_channels=self.input_size, 
+                                               out_channels=self.input_size, 
+                                               nn=self.MLP, root_weight=True, bias=True, aggr='add')
+
+            self.graph_conv_list = ModuleList([self.graph_conv_1, self.graph_conv_2])
 
     def forward(self, x, edge_index, edge_attr, z):
-        node_features = self.node_transform(x)
-        edge_weight = torch.sum(z*edge_attr, axis=1)
-        node_features = self.graph_conv(node_features, edge_index, edge_weight=edge_weight)
+        
+        if self.sampling == True: 
+            edge_weight = torch.sum(z*edge_attr, axis=1)
+        else: 
+            edge_weight = None
+        
+        if self.recurrent == True: 
+            # use GatedGraphConv w/ RNN
+            x = self.rnn_graph_conv(x, edge_index, edge_weight=edge_weight)
+        else: 
+            # use MLPGraphConv layers
+            for layer in self.graph_conv_list:
+                x = layer(x, edge_index, edge_attr)
+        
+        node_features = self.node_transform(x) # transform into real coordinates
         return node_features
     
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
