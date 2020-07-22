@@ -39,6 +39,7 @@ parser.add_argument('--reduced_joints', action='store_true', default=False, help
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
 parser.add_argument('--sampling', action='store_true', default=False, help="Enables sampling step between encoder & decoder.")
 parser.add_argument('--recurrent', action='store_true', default=False, help="Enables recurrent decoder.")
+parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
 print(args)
 
@@ -59,19 +60,25 @@ log.flush()
 
 ### LOAD DATA
 data = MarielDataset(seq_len=args.seq_len, reduced_joints=args.reduced_joints, predicted_timesteps=args.predicted_timesteps, no_overlap=args.no_overlap)
+
 train_indices = np.arange(int(0.7*len(data))) # 70% split for training data, no shuffle
 val_indices = np.arange(int(0.7*len(data)),int(0.85*len(data))) # next 15% on validation
 test_indices = np.arange(int(0.85*len(data)), len(data)) # last 15% on test
 
-dataloader_train = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(train_indices))
-dataloader_val = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(val_indices))
-dataloader_test = DataLoader(data, batch_size=args.batch_size, shuffle=False, drop_last=True, sampler=SequentialSampler(test_indices))
+train = torch.utils.data.Subset(data, train_indices)
+val = torch.utils.data.Subset(data, val_indices)
+test = torch.utils.data.Subset(data, test_indices)
+
+dataloader_train = DataLoader(train, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
+dataloader_val = DataLoader(val, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
+dataloader_test = DataLoader(test, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
 
 torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
 torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
 torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
 
-print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]))
+print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
+log.flush()
 
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
