@@ -43,6 +43,43 @@ class VAE(torch.nn.Module):
         z = torch.nn.functional.gumbel_softmax(log_probabilities, tau=0.5)
         output = self.decoder(node_embedding, edge_index, edge_embedding, z)
         return output
+    
+
+class NRI(torch.nn.Module):
+    """Replica of NRI using Pytorch Geometric"""
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers, sampling, recurrent):
+        super(NRI, self).__init__()
+        self.node_features = node_features
+        self.node_embedding_dim = node_embedding_dim
+        self.edge_features = edge_features
+        self.edge_embedding_dim = edge_embedding_dim
+        self.hidden_size = hidden_size
+        self.input_size = input_size
+        self.output_size = output_size
+        self.num_layers = num_layers
+        self.sampling = sampling
+        self.recurrent = recurrent
+        self.encoder = NRIEncoder(
+            node_features=self.node_features, 
+            edge_features=self.edge_features, 
+            hidden_size=self.hidden_size, 
+            node_embedding_dim=self.node_embedding_dim,
+            edge_embedding_dim=self.edge_embedding_dim)
+        self.decoder = Decoder(
+            input_size=self.node_embedding_dim, 
+            output_size=self.output_size,
+            num_layers=self.num_layers,
+            edge_embedding_dim=self.edge_embedding_dim,
+            hidden_size=self.hidden_size,
+            sampling=self.sampling,
+            recurrent=self.recurrent,
+        )
+
+    def forward(self, batch):
+        node_embedding, edge_index, edge_embedding, log_probabilities = self.encoder(batch)
+        z = torch.nn.functional.gumbel_softmax(log_probabilities, tau=0.5)
+        output = self.decoder(node_embedding, edge_index, edge_embedding, z)
+        return output
 
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
@@ -82,27 +119,30 @@ class NRIEncoder(torch.nn.Module):
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
-        self.node_embedding = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+        self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
         self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
-        self.MLP = Sequential(Linear(self.edge_features, self.hidden_size), 
-                              ReLU(), 
-                              Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
-        self.MLP_2 = Sequential(Linear(self.edge_features, self.hidden_size), 
+        self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
                       ReLU(), 
-                      Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
-        self.MLP_3 = Sequential(Linear(self.edge_features, self.hidden_size), 
+                      Linear(self.hidden_size, self.node_embedding_dim))
+        self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
                   ReLU(), 
-                  Linear(self.hidden_size, 2*self.node_embedding_dim*self.node_embedding_dim))
-        self.graph_conv = MLPGraphConv(in_channels=self.node_embedding_dim, 
-                                           out_channels=self.node_embedding_dim, 
-                                           nn=self.MLP, nn_2=self.MLP_2, root_weight=True, bias=True, aggr='add')
+                  Linear(self.hidden_size, self.node_embedding_dim))
+        self.mlp_eqn_8 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
+                      ReLU(), 
+                      Linear(self.hidden_size, self.edge_embedding_dim))
+        self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
+                                        out_channels=self.node_embedding_dim, 
+                                        nn=self.mlp_eqn_6, nn_2=self.mlp_eqn_7, 
+                                        root_weight=False, 
+                                        bias=False, 
+                                        aggr='add')
 
     def forward(self, data):
-        node_embedding = self.node_embedding(data.x)
+        node_embedding = self.node_embedding_eqn_5(data.x)
         node_embedding = self.graph_conv(node_embedding, data.edge_index)
 #         node_skip = node_embedding
         edge_embedding = self.edge_embedding(data.edge_attr)
-        node_embedding = self.MLP_3(node_embedding) # this actually needs the concatenation of edge attributes (cartesian product)
+        node_embedding = self.mlp_eqn_8(node_embedding) # this actually needs the concatenation of edge attributes (cartesian product)
         return node_embedding, data.edge_index, edge_embedding, F.log_softmax(node_embedding, dim=-1)
     
     

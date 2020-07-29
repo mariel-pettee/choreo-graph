@@ -30,7 +30,7 @@ parser.add_argument('--batch_size', type=int, default=32, help='Number of sequen
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for training.')
 parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps per sequence.')
 parser.add_argument('--node_embedding_dim', type=int, default=64, help='Node embedding size.')
-parser.add_argument('--edge_embedding_dim', type=int, default=32, help='Edge embedding size (i.e. number of edge types).')
+parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embedding size (i.e. number of edge types).')
 parser.add_argument('--hidden_size', type=int, default=64, help='Number of timesteps per sequence.')
 parser.add_argument('--num_layers', type=int, default=3, help='Number of recurrent layers in decoder.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
@@ -90,7 +90,19 @@ hidden_size = args.hidden_size
 num_layers = args.num_layers
 checkpoint_loaded = False 
 
-model = VAE(node_features=node_features, 
+# model = VAE(node_features=node_features, 
+#             edge_features=edge_features, 
+#             hidden_size=hidden_size, 
+#             node_embedding_dim=node_embedding_dim,
+#             edge_embedding_dim=edge_embedding_dim,
+#             num_layers=num_layers,
+#             input_size=node_embedding_dim, 
+#             output_size=node_features+args.predicted_timesteps*data.n_dim,
+#             sampling=args.sampling, 
+#             recurrent=args.recurrent,
+#            )
+
+model = NRI(node_features=node_features, 
             edge_features=edge_features, 
             hidden_size=hidden_size, 
             node_embedding_dim=node_embedding_dim,
@@ -114,7 +126,7 @@ log.flush()
 if os.path.isfile(checkpoint_path):
     print("Loading saved checkpoint from {}...".format(checkpoint_path), file=log)
     log.flush()
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
