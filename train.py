@@ -73,6 +73,7 @@ dataloader_train = DataLoader(train, batch_size=args.batch_size, shuffle=args.sh
 dataloader_val = DataLoader(val, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
 dataloader_test = DataLoader(test, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
 
+pickle.dump({'args': args}, open(os.path.join(save_folder,'args.pkl'), "wb"))
 torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
 torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
 torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
