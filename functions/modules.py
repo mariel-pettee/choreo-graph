@@ -137,12 +137,19 @@ class NRIEncoder(torch.nn.Module):
                                         bias=False, 
                                         aggr='add')
 
+        self.half_conv = NRIHalfConv(in_channels=self.node_embedding_dim,
+                                        out_channels=self.node_embedding_dim,
+                                        nn=self.mlp_eqn_8,
+                                        root_weight=False,
+                                        bias=False,
+                                        aggr='add')
+
     def forward(self, data):
         node_embedding = self.node_embedding_eqn_5(data.x)
         node_embedding = self.graph_conv(node_embedding, data.edge_index)
 #         node_skip = node_embedding
         edge_embedding = self.edge_embedding(data.edge_attr)
-        node_embedding = self.mlp_eqn_8(node_embedding) # this actually needs the concatenation of edge attributes (cartesian product)
+        node_embedding = self.half_conv(node_embedding, data.edge_index) # this actually needs the concatenation of edge attributes (cartesian product)
         return node_embedding, data.edge_index, edge_embedding, F.log_softmax(node_embedding, dim=-1)
     
     
@@ -268,6 +275,86 @@ class NRIGraphConv(MessagePassing): # Heavily inspired by NNConv
 #             aggr_out = aggr_out + torch.mm(x, self.root)
 #         if self.bias is not None:
 #             aggr_out = aggr_out + self.bias
+
+        return aggr_out
+
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
+
+
+class NRIHalfConv(MessagePassing):  # Heavily inspired by NNConv
+    r"""
+    Args:
+        in_channels (int): Size of each input sample.
+        out_channels (int): Size of each output sample.
+        nn (torch.nn.Module): A neural network that
+            maps edge features :obj:`edge_attr` of shape :obj:`[-1,
+            num_edge_features]` to shape
+            :obj:`[-1, in_channels * out_channels]`, *e.g.*, defined by
+            :class:`torch.nn.Sequential`.
+        aggr (string, optional): The aggregation scheme to use
+            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
+            (default: :obj:`"add"`)
+        root_weight (bool, optional): If set to :obj:`False`, the layer will
+            not add the transformed root node features to the output.
+            (default: :obj:`True`)
+        bias (bool, optional): If set to :obj:`False`, the layer will not learn
+            an additive bias. (default: :obj:`True`)
+        **kwargs (optional): Additional arguments of
+            :class:`torch_geometric.nn.conv.MessagePassing`.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 nn,
+                 aggr='add',
+                 root_weight=True,
+                 bias=True,
+                 **kwargs):
+        super(NRIHalfConv, self).__init__(aggr=aggr, **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.nn = nn
+        self.aggr = aggr
+
+        if root_weight:
+            self.root = Parameter(torch.Tensor(in_channels, out_channels))
+        else:
+            self.register_parameter('root', None)
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        reset(self.nn)
+        if self.root is not None:
+            uniform(self.root.size(0), self.root)
+        zeros(self.bias)
+
+    def forward(self, x, edge_index):
+        """"""
+        x = x.unsqueeze(-1) if x.dim() == 1 else x
+        return self.propagate(edge_index, x=x)
+
+    def message(self, x_i, x_j):
+        node_features = torch.tensor(torch.cat([x_i, x_j], dim=1))
+        return self.nn(node_features)
+
+    def update(self, aggr_out):
+        aggr_out = 0.0*aggr_out #Zero Out the message aggregations
+
+        # Potentially use x to do skip_connection here
+
+        #         if self.root is not None:
+        #             aggr_out = aggr_out + torch.mm(x, self.root)
+        #         if self.bias is not None:
+        #             aggr_out = aggr_out + self.bias
 
         return aggr_out
 
