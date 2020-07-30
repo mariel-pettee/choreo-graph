@@ -294,7 +294,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_ty
                             np.linspace(segments[i,2,0],segments[i,2,1],2),
 #                                 color=c,
                             color=custom_colors[edge_class],
-                            alpha=0.03,
+                            alpha=0.1,
                             lw=lw)[0]
                     lines.append(l)
     return lines

@@ -32,7 +32,7 @@ parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps
 parser.add_argument('--node_embedding_dim', type=int, default=64, help='Node embedding size.')
 parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embedding size (i.e. number of edge types).')
 parser.add_argument('--hidden_size', type=int, default=64, help='Number of timesteps per sequence.')
-parser.add_argument('--num_layers', type=int, default=3, help='Number of recurrent layers in decoder.')
+parser.add_argument('--num_layers', type=int, default=1, help='Number of recurrent layers in decoder.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
@@ -108,10 +108,7 @@ model = NRI(node_features=node_features,
             node_embedding_dim=node_embedding_dim,
             edge_embedding_dim=edge_embedding_dim,
             num_layers=num_layers,
-            input_size=node_embedding_dim, 
             output_size=node_features+args.predicted_timesteps*data.n_dim,
-            sampling=args.sampling, 
-            recurrent=args.recurrent,
            )
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)

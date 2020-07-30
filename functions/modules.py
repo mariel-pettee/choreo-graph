@@ -8,6 +8,11 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from .functions import *
 
+import pdb
+# pdb.set_trace()
+
+#### UMBRELLA MODELS
+
 class VAE(torch.nn.Module):
     """Graph Variational Autoencoder"""
     def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers, sampling, recurrent):
@@ -44,42 +49,39 @@ class VAE(torch.nn.Module):
         output = self.decoder(node_embedding, edge_index, edge_embedding, z)
         return output
     
-
 class NRI(torch.nn.Module):
-    """Replica of NRI using Pytorch Geometric"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, input_size, output_size, num_layers, sampling, recurrent):
+    """Implementation of NRI with Pytorch Geometric"""
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, output_size, num_layers):
         super(NRI, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
         self.edge_features = edge_features
         self.edge_embedding_dim = edge_embedding_dim
         self.hidden_size = hidden_size
-        self.input_size = input_size
         self.output_size = output_size
         self.num_layers = num_layers
-        self.sampling = sampling
-        self.recurrent = recurrent
         self.encoder = NRIEncoder(
             node_features=self.node_features, 
             edge_features=self.edge_features, 
             hidden_size=self.hidden_size, 
             node_embedding_dim=self.node_embedding_dim,
-            edge_embedding_dim=self.edge_embedding_dim)
-        self.decoder = Decoder(
-            input_size=self.node_embedding_dim, 
+            edge_embedding_dim=self.edge_embedding_dim,
+        )
+        self.decoder = NRIDecoder(
             output_size=self.output_size,
             num_layers=self.num_layers,
+            node_features=self.node_features,
             edge_embedding_dim=self.edge_embedding_dim,
             hidden_size=self.hidden_size,
-            sampling=self.sampling,
-            recurrent=self.recurrent,
         )
 
     def forward(self, batch):
-        node_embedding, edge_index, edge_embedding, log_probabilities = self.encoder(batch)
-        z = torch.nn.functional.gumbel_softmax(log_probabilities, tau=0.5)
-        output = self.decoder(node_embedding, edge_index, edge_embedding, z)
+        edge_embedding = self.encoder(batch)
+        z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
+        output = self.decoder(batch.x, batch.edge_index, z)
         return output
+    
+### VAE MODULES 
 
 class MLPEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
@@ -109,49 +111,6 @@ class MLPEncoder(torch.nn.Module):
             node_embedding = layer(node_embedding, data.edge_index, data.edge_attr)
         edge_embedding = self.edge_embedding(data.edge_attr)
         return node_embedding, data.edge_index, edge_embedding, F.log_softmax(edge_embedding, dim=-1)
-
-class NRIEncoder(torch.nn.Module):
-    """Encoder for fully-connected graph inputs"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim):
-        super(NRIEncoder, self).__init__()
-        self.node_features = node_features
-        self.edge_features = edge_features
-        self.hidden_size  = hidden_size
-        self.node_embedding_dim = node_embedding_dim
-        self.edge_embedding_dim = edge_embedding_dim
-        self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
-        self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
-        self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
-                      ReLU(), 
-                      Linear(self.hidden_size, self.node_embedding_dim))
-        self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
-                  ReLU(), 
-                  Linear(self.hidden_size, self.node_embedding_dim))
-        self.mlp_eqn_8 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
-                      ReLU(), 
-                      Linear(self.hidden_size, self.edge_embedding_dim))
-        self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
-                                        out_channels=self.node_embedding_dim, 
-                                        nn=self.mlp_eqn_6, nn_2=self.mlp_eqn_7, 
-                                        root_weight=False, 
-                                        bias=False, 
-                                        aggr='add')
-
-        self.half_conv = NRIHalfConv(in_channels=self.node_embedding_dim,
-                                        out_channels=self.node_embedding_dim,
-                                        nn=self.mlp_eqn_8,
-                                        root_weight=False,
-                                        bias=False,
-                                        aggr='add')
-
-    def forward(self, data):
-        node_embedding = self.node_embedding_eqn_5(data.x)
-        node_embedding = self.graph_conv(node_embedding, data.edge_index)
-#         node_skip = node_embedding
-        edge_embedding = self.edge_embedding(data.edge_attr)
-        node_embedding = self.half_conv(node_embedding, data.edge_index) # this actually needs the concatenation of edge attributes (cartesian product)
-        return node_embedding, data.edge_index, edge_embedding, F.log_softmax(node_embedding, dim=-1)
-    
     
 class Decoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
@@ -198,171 +157,6 @@ class Decoder(torch.nn.Module):
         node_features = self.node_transform(x) # transform into real coordinates
         return node_features
 
-    
-class NRIGraphConv(MessagePassing): # Heavily inspired by NNConv
-    r"""
-    Args:
-        in_channels (int): Size of each input sample.
-        out_channels (int): Size of each output sample.
-        nn (torch.nn.Module): A neural network that
-            maps edge features :obj:`edge_attr` of shape :obj:`[-1,
-            num_edge_features]` to shape
-            :obj:`[-1, in_channels * out_channels]`, *e.g.*, defined by
-            :class:`torch.nn.Sequential`.
-        aggr (string, optional): The aggregation scheme to use
-            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
-            (default: :obj:`"add"`)
-        root_weight (bool, optional): If set to :obj:`False`, the layer will
-            not add the transformed root node features to the output.
-            (default: :obj:`True`)
-        bias (bool, optional): If set to :obj:`False`, the layer will not learn
-            an additive bias. (default: :obj:`True`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch_geometric.nn.conv.MessagePassing`.
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 nn,
-                 nn_2,
-                 aggr='add',
-                 root_weight=True,
-                 bias=True,
-                 **kwargs):
-        super(NRIGraphConv, self).__init__(aggr=aggr, **kwargs)
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.nn = nn
-        self.nn_2 = nn_2
-        self.aggr = aggr
-
-        if root_weight:
-            self.root = Parameter(torch.Tensor(in_channels, out_channels))
-        else:
-            self.register_parameter('root', None)
-
-        if bias:
-            self.bias = Parameter(torch.Tensor(out_channels))
-        else:
-            self.register_parameter('bias', None)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        reset(self.nn)
-        reset(self.nn_2)
-        if self.root is not None:
-            uniform(self.root.size(0), self.root)
-        zeros(self.bias)
-            
-    def forward(self, x, edge_index):
-        """"""
-        x = x.unsqueeze(-1) if x.dim() == 1 else x
-        return self.propagate(edge_index, x=x)
-
-    def message(self, x_i, x_j):
-        node_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
-        return self.nn(node_features)
-
-    def update(self, aggr_out, x):
-        aggr_out = self.nn_2(aggr_out) 
-
-        # Potentially use x to do skip_connection here 
-        
-#         if self.root is not None:
-#             aggr_out = aggr_out + torch.mm(x, self.root)
-#         if self.bias is not None:
-#             aggr_out = aggr_out + self.bias
-
-        return aggr_out
-
-    def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
-
-
-class NRIHalfConv(MessagePassing):  # Heavily inspired by NNConv
-    r"""
-    Args:
-        in_channels (int): Size of each input sample.
-        out_channels (int): Size of each output sample.
-        nn (torch.nn.Module): A neural network that
-            maps edge features :obj:`edge_attr` of shape :obj:`[-1,
-            num_edge_features]` to shape
-            :obj:`[-1, in_channels * out_channels]`, *e.g.*, defined by
-            :class:`torch.nn.Sequential`.
-        aggr (string, optional): The aggregation scheme to use
-            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
-            (default: :obj:`"add"`)
-        root_weight (bool, optional): If set to :obj:`False`, the layer will
-            not add the transformed root node features to the output.
-            (default: :obj:`True`)
-        bias (bool, optional): If set to :obj:`False`, the layer will not learn
-            an additive bias. (default: :obj:`True`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch_geometric.nn.conv.MessagePassing`.
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 nn,
-                 aggr='add',
-                 root_weight=True,
-                 bias=True,
-                 **kwargs):
-        super(NRIHalfConv, self).__init__(aggr=aggr, **kwargs)
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.nn = nn
-        self.aggr = aggr
-
-        if root_weight:
-            self.root = Parameter(torch.Tensor(in_channels, out_channels))
-        else:
-            self.register_parameter('root', None)
-
-        if bias:
-            self.bias = Parameter(torch.Tensor(out_channels))
-        else:
-            self.register_parameter('bias', None)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        reset(self.nn)
-        if self.root is not None:
-            uniform(self.root.size(0), self.root)
-        zeros(self.bias)
-
-    def forward(self, x, edge_index):
-        """"""
-        x = x.unsqueeze(-1) if x.dim() == 1 else x
-        return self.propagate(edge_index, x=x)
-
-    def message(self, x_i, x_j):
-        node_features = torch.tensor(torch.cat([x_i, x_j], dim=1))
-        return self.nn(node_features)
-
-    def update(self, aggr_out):
-        aggr_out = 0.0*aggr_out #Zero Out the message aggregations
-
-        # Potentially use x to do skip_connection here
-
-        #         if self.root is not None:
-        #             aggr_out = aggr_out + torch.mm(x, self.root)
-        #         if self.bias is not None:
-        #             aggr_out = aggr_out + self.bias
-
-        return aggr_out
-
-    def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
-
-
-    
 class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     r"""
     Args:
@@ -440,3 +234,212 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
 
+### NRI MODULES
+
+class NRIEncoder(torch.nn.Module):
+    """Encoder for fully-connected graph inputs"""
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim):
+        super(NRIEncoder, self).__init__()
+        self.node_features = node_features
+        self.edge_features = edge_features
+        self.hidden_size  = hidden_size
+        self.node_embedding_dim = node_embedding_dim
+        self.edge_embedding_dim = edge_embedding_dim
+        self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+        self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
+        self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
+                      ReLU(), 
+                      Linear(self.hidden_size, self.node_embedding_dim))
+        self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
+                  ReLU(), 
+                  Linear(self.hidden_size, self.node_embedding_dim))
+        self.mlp_eqn_8 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
+                      ReLU(), 
+                      Linear(self.hidden_size, self.edge_embedding_dim))
+        self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
+                                        out_channels=self.node_embedding_dim, 
+                                        nn=self.mlp_eqn_6, nn_2=self.mlp_eqn_7, 
+                                        root_weight=False, 
+                                        bias=False, 
+                                        aggr='add')
+
+    def forward(self, data):
+        node_embedding = self.node_embedding_eqn_5(data.x)
+        node_embedding = self.graph_conv(node_embedding, data.edge_index)
+        source_node_features = torch.index_select(node_embedding, 0, data.edge_index[0])
+        destination_node_features = torch.index_select(node_embedding, 0, data.edge_index[1])
+        edge_messages = torch.cat([source_node_features, destination_node_features], dim=1)
+        edge_embedding = self.mlp_eqn_8(edge_messages)
+        return edge_embedding
+    
+class NRIGraphConv(MessagePassing):
+    """Heavily inspired by NNConv; used for the NRI Encoder."""
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 nn,
+                 nn_2,
+                 aggr='add',
+                 root_weight=True,
+                 bias=True,
+                 **kwargs):
+        super(NRIGraphConv, self).__init__(aggr=aggr, **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.nn = nn
+        self.nn_2 = nn_2
+        self.aggr = aggr
+
+        if root_weight:
+            self.root = Parameter(torch.Tensor(in_channels, out_channels))
+        else:
+            self.register_parameter('root', None)
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        reset(self.nn)
+        reset(self.nn_2)
+        if self.root is not None:
+            uniform(self.root.size(0), self.root)
+        zeros(self.bias)
+            
+    def forward(self, x, edge_index):
+        """"""
+        x = x.unsqueeze(-1) if x.dim() == 1 else x
+        return self.propagate(edge_index, x=x)
+
+    def message(self, x_i, x_j):
+        node_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
+        return self.nn(node_features)
+
+    def update(self, aggr_out, x):
+        aggr_out = self.nn_2(aggr_out) 
+
+        # Potentially use x to do skip_connection here 
+        
+        if self.root is not None:
+            aggr_out = aggr_out + torch.mm(x, self.root)
+        if self.bias is not None:
+            aggr_out = aggr_out + self.bias
+
+        return aggr_out
+
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
+
+
+class NRIDecoder(torch.nn.Module):
+    """Decoder from graph to predicted positions"""
+    def __init__(self, node_features, hidden_size, output_size, num_layers, edge_embedding_dim):
+        super(NRIDecoder, self).__init__()
+        self.node_features = node_features
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.num_layers = num_layers
+        self.edge_embedding_dim = edge_embedding_dim
+        self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, num_layers=self.num_layers, k=self.edge_embedding_dim, hidden_size=self.hidden_size)
+        self.node_transform = Sequential(Linear(self.hidden_size, self.output_size), ReLU())
+
+    def forward(self, x, edge_index, z):
+        x = self.rnn_graph_conv(x, edge_index, z)
+        node_features = self.node_transform(x) # transform back into real coordinates
+        return node_features
+    
+# class NRIDecoder_MLP(MessagePassing):
+#     """Heavily inspired by NNConv."""
+
+#     def __init__(self,
+#                  in_channels,
+#                  out_channels,
+#                  mlp_list,
+#                  aggr='add',
+#                  **kwargs):
+#         super(NRIDecoder_MLP, self).__init__(aggr=aggr, **kwargs)
+
+#         self.in_channels = in_channels
+#         self.out_channels = out_channels
+# #         self.mlp_0 = # TO DO: DEFINE MLP LAYERS HERE
+#         self.mlp_list = ModuleList([self.mlp_0, self.mlp_1, self.mlp_2, self.mlp_3])
+#         self.aggr = aggr
+            
+#     def forward(self, x, edge_index, z):
+#         """"""
+#         x = x.unsqueeze(-1) if x.dim() == 1 else x
+#         return self.propagate(edge_index, x=x, z=z)
+
+#     def message(self, x_i, x_j, z):
+#         edge_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
+#         # might need a torch.stack(torch.tensor) situation here
+#         output = torch.sum([z[:,i]*layer(edge_features) for (i,layer) in enumerate(self.mlp_list)], axis=1)
+#         return output
+
+#     def __repr__(self):
+#         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
+
+class NRIDecoder_Recurrent(MessagePassing):
+    r"""Adapted from GatedGraphConv layer.
+
+    Args:
+        out_channels (int): Size of each input sample.
+        num_layers (int): The sequence length :math:`L`.
+        aggr (string, optional): The aggregation scheme to use
+            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
+            (default: :obj:`"add"`)
+        bias (bool, optional): If set to :obj:`False`, the layer will not learn
+            an additive bias. (default: :obj:`True`)
+        **kwargs (optional): Additional arguments of
+            :class:`torch_geometric.nn.conv.MessagePassing`.
+    """
+    def __init__(self, node_features: int, num_layers: int, k: int, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
+        super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
+        self.node_features = node_features
+        self.num_layers = num_layers
+        self.k = k
+        self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
+        self.mlp_0 = Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size))
+        self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.rnn.reset_parameters()
+
+    def forward(self, x, edge_index, z):
+        if x.size(-1) > self.node_features:
+            raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
+
+        if x.size(-1) < self.node_features:
+            zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
+            x = torch.cat([x, zero], dim=1)
+
+        for i in range(self.num_layers):
+            m = self.propagate(x=x, edge_index=edge_index, z=z, size=None)
+            x = self.rnn(m, x) 
+        return x
+
+    def message(self, x_i, x_j, z):
+        edge_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
+        k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)]
+        print("length of k list", len(k_list))
+        stack = torch.cat(k_list, dim=1)
+        print("stack:",stack.size())
+        output = stack.sum(dim=1)
+#         pdb.set_trace()
+        return output
+
+    def message_and_aggregate(self, adj_t, x):
+        return matmul(adj_t, x, reduce=self.aggr)
+
+    def __repr__(self):
+        return '{}({}, num_layers={})'.format(self.__class__.__name__,
+                                              self.node_features,
+                                              self.num_layers)
+    
+    
