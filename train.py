@@ -82,10 +82,6 @@ log.flush()
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
-node_embedding_dim = args.node_embedding_dim
-edge_embedding_dim = args.edge_embedding_dim # number of edge types
-hidden_size = args.hidden_size
-num_layers = args.num_layers
 checkpoint_loaded = False 
 
 # model = VAE(node_features=node_features, 
@@ -100,12 +96,28 @@ checkpoint_loaded = False
 
 model = NRI(node_features=node_features, 
             edge_features=edge_features, 
-            hidden_size=hidden_size, 
-            node_embedding_dim=node_embedding_dim,
-            edge_embedding_dim=edge_embedding_dim,
-            num_layers=num_layers,
+            hidden_size=args.hidden_size, 
+            node_embedding_dim=args.node_embedding_dim,
+            edge_embedding_dim=args.edge_embedding_dim,
+            num_layers=args.num_layers,
             output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
+
+# encoder = NRIEncoder(
+#             node_features=node_features, 
+#             edge_features=edge_features, 
+#             hidden_size=args.hidden_size, 
+#             node_embedding_dim=args.node_embedding_dim,
+#             edge_embedding_dim=args.edge_embedding_dim,
+#         )
+
+# decoder = NRIDecoder(
+#             output_size=node_features+args.predicted_timesteps*data.n_dim,
+#             num_layers=args.num_layers,
+#             node_features=node_features,
+#             edge_embedding_dim=args.edge_embedding_dim,
+#             hidden_size=args.hidden_size,
+#         )
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -116,6 +128,12 @@ print(model)
 print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
+
+# print(encoder)
+# print("Total encoder trainable parameters: {:,}".format(count_parameters(encoder)))
+# print(decoder)
+# print("Total decoder trainable parameters: {:,}".format(count_parameters(decoder)))
+
 
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):
