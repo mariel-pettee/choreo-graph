@@ -8,8 +8,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from .functions import *
 
-import pdb
-# pdb.set_trace()
+# import pdb; pdb.set_trace()
 
 #### UMBRELLA MODELS
 
@@ -317,7 +316,7 @@ class NRIGraphConv(MessagePassing):
         return self.propagate(edge_index, x=x)
 
     def message(self, x_i, x_j):
-        node_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
+        node_features = torch.cat([x_i,x_j], dim=1).detach().clone()
         return self.nn(node_features)
 
     def update(self, aggr_out, x):
@@ -385,27 +384,13 @@ class NRIDecoder(torch.nn.Module):
 #         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
 
 class NRIDecoder_Recurrent(MessagePassing):
-    r"""Adapted from GatedGraphConv layer.
-
-    Args:
-        out_channels (int): Size of each input sample.
-        num_layers (int): The sequence length :math:`L`.
-        aggr (string, optional): The aggregation scheme to use
-            (:obj:`"add"`, :obj:`"mean"`, :obj:`"max"`).
-            (default: :obj:`"add"`)
-        bias (bool, optional): If set to :obj:`False`, the layer will not learn
-            an additive bias. (default: :obj:`True`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch_geometric.nn.conv.MessagePassing`.
-    """
+    """Adapted from GatedGraphConv layer."""
     def __init__(self, node_features: int, num_layers: int, k: int, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.node_features = node_features
         self.num_layers = num_layers
         self.k = k
-        # self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
         self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
-        self.mlp_0 = Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size))
         self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
         self.reset_parameters()
 
@@ -413,44 +398,23 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.rnn.reset_parameters()
 
     def forward(self, x, edge_index, z):
-        # if x.size(-1) > self.node_features:
-        #     raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
-        #
-        # if x.size(-1) < self.node_features:
-        #     zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
-        #     x = torch.cat([x, zero], dim=1)
+        if x.size(-1) > self.node_features:
+            raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
+        
+        if x.size(-1) < self.node_features:
+            zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
+            x = torch.cat([x, zero], dim=1)
 
         for i in range(self.num_layers):
-            # import pdb; pdb.set_trace()
             m = self.propagate(x=x, edge_index=edge_index, z=z, size=None)
-
             x = self.rnn(x, m)
         return x
 
     def message(self, x_i, x_j, z):
-        edge_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
-        k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)]
-        # print("length of k list", len(k_list))
-
-        # for ii in range(len(k_list)):
-        #     if ii==0:
-        #         aggr = k_list[ii]
-        #     else:
-        #         aggr += k_list[ii]
-
-        # import pdb;pdb.set_trace()
-
-        stack = torch.stack(k_list, dim =1)
-        output = stack.sum(dim=1)
-
-
-        # import pdb;pdb.set_trace()
-        # stack = torch.cat(k_list, dim=1)
-        # # print("stack:",stack.size())
-        # output = stack.sum(dim=1)
-        # self.stack = stack
-        # self.h_message = output
-#         pdb.set_trace()
+        edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
+        k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+        stack = torch.stack(k_list, dim=1)
+        output = stack.sum(dim=1) # sum over k
         return output
 
     def message_and_aggregate(self, adj_t, x):

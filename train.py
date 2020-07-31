@@ -11,7 +11,7 @@ import networkx as nx # for visualizing graphs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-# from tqdm import tqdm
+from tqdm import tqdm
 import pdb
 import os 
 import argparse
@@ -73,10 +73,10 @@ dataloader_train = DataLoader(train, batch_size=args.batch_size, shuffle=args.sh
 dataloader_val = DataLoader(val, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
 dataloader_test = DataLoader(test, batch_size=args.batch_size, shuffle=args.shuffle, drop_last=True)
 
-# pickle.dump({'args': args}, open(os.path.join(save_folder,'args.pkl'), "wb"))
-# torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
-# torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
-# torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
+pickle.dump({'args': args}, open(os.path.join(save_folder,'args.pkl'), "wb"))
+torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
+torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
+torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
 
 print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
 log.flush()
@@ -225,16 +225,30 @@ def train_model(epochs):
         val_reco_losses.append(epoch_val_reco_loss)
         val_pred_losses.append(epoch_val_pred_loss)
 
-        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} |time: {:.4f} sec".format(epoch+1, epochs, 
-                                                                                                                epoch_train_loss,
-                                                                                                                epoch_train_reco_loss, 
-                                                                                                                epoch_train_pred_loss,
-                                                                                                                epoch_val_loss,
-                                                                                                                epoch_val_reco_loss, 
-                                                                                                                epoch_val_pred_loss,
-                                                                                                                time.time() - t),
-                                                                                                                file=log)
+        ### Print to log file
+        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} |time: {:.4f} sec".format(
+            epoch+1, 
+            epochs, 
+            epoch_train_loss,
+            epoch_train_reco_loss, 
+            epoch_train_pred_loss,
+            epoch_val_loss,
+            epoch_val_reco_loss, 
+            epoch_val_pred_loss,
+            time.time() - t),
+            file=log)
         log.flush()
+        ### Print to console
+        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} |time: {:.4f} sec".format(
+            epoch+1, 
+            epochs, 
+            epoch_train_loss,
+            epoch_train_reco_loss, 
+            epoch_train_pred_loss,
+            epoch_val_loss,
+            epoch_val_reco_loss, 
+            epoch_val_pred_loss,
+            time.time() - t))
         
         if epoch == 0 and not checkpoint_loaded: best_loss = epoch_val_loss
         elif epoch == 0 and checkpoint_loaded: best_loss = min(epoch_val_loss, loss_checkpoint)
