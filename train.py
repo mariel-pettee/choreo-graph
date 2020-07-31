@@ -26,19 +26,17 @@ from functions.modules import *
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default="vae", help='Distinguishing prefix for save directory.')
 parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train.')
-parser.add_argument('--batch_size', type=int, default=32, help='Number of sequences per batch.')
-parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate for training.')
+parser.add_argument('--batch_size', type=int, default=128, help='Number of sequences per batch.')
+parser.add_argument('--lr', type=float, default=5e-4, help='Learning rate for training.')
 parser.add_argument('--seq_len', type=int, default=49, help='Number of timesteps per sequence.')
-parser.add_argument('--node_embedding_dim', type=int, default=64, help='Node embedding size.')
+parser.add_argument('--node_embedding_dim', type=int, default=256, help='Node embedding size.')
 parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embedding size (i.e. number of edge types).')
-parser.add_argument('--hidden_size', type=int, default=64, help='Number of timesteps per sequence.')
+parser.add_argument('--hidden_size', type=int, default=256, help='Number of timesteps per sequence.')
 parser.add_argument('--num_layers', type=int, default=1, help='Number of recurrent layers in decoder.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
-parser.add_argument('--sampling', action='store_true', default=False, help="Enables sampling step between encoder & decoder.")
-parser.add_argument('--recurrent', action='store_true', default=False, help="Enables recurrent decoder.")
 parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
 print(args)
@@ -98,8 +96,6 @@ checkpoint_loaded = False
 #             num_layers=num_layers,
 #             input_size=node_embedding_dim, 
 #             output_size=node_features+args.predicted_timesteps*data.n_dim,
-#             sampling=args.sampling, 
-#             recurrent=args.recurrent,
 #            )
 
 model = NRI(node_features=node_features, 

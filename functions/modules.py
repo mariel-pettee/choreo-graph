@@ -245,7 +245,6 @@ class NRIEncoder(torch.nn.Module):
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
         self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
-        self.edge_embedding = Sequential(Linear(self.edge_features, self.edge_embedding_dim), ReLU())
         self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
                       ReLU(), 
                       Linear(self.hidden_size, self.node_embedding_dim))
