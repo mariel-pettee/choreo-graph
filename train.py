@@ -116,6 +116,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("\nUsing {}".format(device), file=log)
 model = model.to(device)
 print(model, file=log)
+print(model)
+print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
 
