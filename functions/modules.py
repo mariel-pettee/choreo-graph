@@ -50,7 +50,7 @@ class VAE(torch.nn.Module):
     
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, output_size, num_layers):
+    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, output_size, seq_len):
         super(NRI, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
@@ -58,7 +58,7 @@ class NRI(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_layers = num_layers
+        self.seq_len = seq_len
         self.encoder = NRIEncoder(
             node_features=self.node_features, 
             edge_features=self.edge_features, 
@@ -68,7 +68,7 @@ class NRI(torch.nn.Module):
         )
         self.decoder = NRIDecoder(
             output_size=self.output_size,
-            num_layers=self.num_layers,
+            seq_len=self.seq_len,
             node_features=self.node_features,
             edge_embedding_dim=self.edge_embedding_dim,
             hidden_size=self.hidden_size,
@@ -113,12 +113,12 @@ class MLPEncoder(torch.nn.Module):
     
 class Decoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, input_size, hidden_size, output_size, num_layers, edge_embedding_dim, sampling, recurrent):
+    def __init__(self, input_size, hidden_size, output_size, seq_len, edge_embedding_dim, sampling, recurrent):
         super(Decoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_layers = num_layers
+        self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
         self.sampling = sampling
         self.recurrent = recurrent
@@ -336,29 +336,36 @@ class NRIGraphConv(MessagePassing):
 
 class NRIDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, node_features, hidden_size, output_size, num_layers, edge_embedding_dim):
+    def __init__(self, node_features, hidden_size, output_size, seq_len, edge_embedding_dim):
         super(NRIDecoder, self).__init__()
         self.node_features = node_features
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_layers = num_layers
+        self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
-        self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, num_layers=self.num_layers, k=self.edge_embedding_dim, hidden_size=self.hidden_size)
         self.node_transform = Sequential(Linear(self.hidden_size, self.output_size), ReLU())
-
+        self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, 
+                                                   seq_len=self.seq_len, 
+                                                   k=self.edge_embedding_dim, 
+                                                   hidden_size=self.hidden_size,
+                                                   f_out=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
+                                                   f_out_2=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
+                                                  )
     def forward(self, x, edge_index, z):
         x = self.rnn_graph_conv(x, edge_index, z)
-        node_features = self.node_transform(x) # transform back into real coordinates
-        return node_features
+#         node_features = self.node_transform(x) # transform back into real coordinates
+        return x
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
-    def __init__(self, node_features: int, num_layers: int, k: int, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
+    def __init__(self, node_features: int, seq_len: int, k: int, f_out, f_out_2, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.node_features = node_features
-        self.num_layers = num_timesteps
+        self.seq_len = seq_len
         self.k = k
         self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
+        self.f_out = f_out
+        self.f_out_2 = f_out_2
         self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
         self.reset_parameters()
 
@@ -374,10 +381,13 @@ class NRIDecoder_Recurrent(MessagePassing):
             x = torch.cat([x, zero], dim=1)
             
         h = torch.zeros(x.size())
-        for i in range(self.num_timesteps):
-            m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
+        for timestep in range(self.seq_len):
+            if h.size() == x.size():
+                m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
+            else:
+                m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
             h = self.rnn(x, m)
-            x = f_out(h)
+            x = self.f_out_2(h)
         return x
 
     def message(self, x_i, x_j, z):
@@ -388,8 +398,8 @@ class NRIDecoder_Recurrent(MessagePassing):
         return output
 
     def __repr__(self):
-        return '{}({}, num_layers={})'.format(self.__class__.__name__,
+        return '{}({}, seq_len={})'.format(self.__class__.__name__,
                                               self.node_features,
-                                              self.num_layers)
+                                              self.seq_len)
     
     

@@ -100,28 +100,16 @@ model = NRI(node_features=node_features,
             hidden_size=args.hidden_size, 
             node_embedding_dim=args.node_embedding_dim,
             edge_embedding_dim=args.edge_embedding_dim,
-            num_layers=args.num_layers,
+            seq_len=args.seq_len,
             output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
 
-# encoder = NRIEncoder(
-#             node_features=node_features, 
-#             edge_features=edge_features, 
-#             hidden_size=args.hidden_size, 
-#             node_embedding_dim=args.node_embedding_dim,
-#             edge_embedding_dim=args.edge_embedding_dim,
-#         )
-
-# decoder = NRIDecoder(
-#             output_size=node_features+args.predicted_timesteps*data.n_dim,
-#             num_layers=args.num_layers,
-#             node_features=node_features,
-#             edge_embedding_dim=args.edge_embedding_dim,
-#             hidden_size=args.hidden_size,
-#         )
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+device = 'cpu' ## Hard-coded for now, since memory requirements will force us to use CPU 
+
 print("\nUsing {}".format(device), file=log)
 model = model.to(device)
 print(model, file=log)
@@ -129,11 +117,6 @@ print(model)
 print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
-
-# print(encoder)
-# print("Total encoder trainable parameters: {:,}".format(count_parameters(encoder)))
-# print(decoder)
-# print("Total decoder trainable parameters: {:,}".format(count_parameters(decoder)))
 
 
 ### LOAD PRE-TRAINED WEIGHTS
