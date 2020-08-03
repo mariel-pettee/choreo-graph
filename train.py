@@ -33,6 +33,7 @@ parser.add_argument('--node_embedding_dim', type=int, default=256, help='Node em
 parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embedding size (i.e. number of edge types).')
 parser.add_argument('--hidden_size', type=int, default=256, help='Number of timesteps per sequence.')
 parser.add_argument('--num_layers', type=int, default=1, help='Number of recurrent layers in decoder.')
+parser.add_argument('--pred_to_reco_ratio', type=float, default=1., help='How to weight prediction versus reconstruction losses during training.')
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
@@ -148,7 +149,7 @@ if os.path.isfile(checkpoint_path):
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
-prediction_to_reconstruction_loss_ratio = 0 # you might want to weight the prediction loss higher to help it compete with the larger prediction seq_len
+prediction_to_reconstruction_loss_ratio = args.pred_to_reco_ratio # you might want to weight the prediction loss higher to help it compete with the larger prediction seq_len
 
 def train_model(epochs):
     train_losses = []

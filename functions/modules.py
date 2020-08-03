@@ -351,43 +351,12 @@ class NRIDecoder(torch.nn.Module):
         node_features = self.node_transform(x) # transform back into real coordinates
         return node_features
     
-# class NRIDecoder_MLP(MessagePassing):
-#     """Heavily inspired by NNConv."""
-
-#     def __init__(self,
-#                  in_channels,
-#                  out_channels,
-#                  mlp_list,
-#                  aggr='add',
-#                  **kwargs):
-#         super(NRIDecoder_MLP, self).__init__(aggr=aggr, **kwargs)
-
-#         self.in_channels = in_channels
-#         self.out_channels = out_channels
-# #         self.mlp_0 = # TO DO: DEFINE MLP LAYERS HERE
-#         self.mlp_list = ModuleList([self.mlp_0, self.mlp_1, self.mlp_2, self.mlp_3])
-#         self.aggr = aggr
-            
-#     def forward(self, x, edge_index, z):
-#         """"""
-#         x = x.unsqueeze(-1) if x.dim() == 1 else x
-#         return self.propagate(edge_index, x=x, z=z)
-
-#     def message(self, x_i, x_j, z):
-#         edge_features = torch.tensor(torch.cat([x_i,x_j], dim=1))
-#         # might need a torch.stack(torch.tensor) situation here
-#         output = torch.sum([z[:,i]*layer(edge_features) for (i,layer) in enumerate(self.mlp_list)], axis=1)
-#         return output
-
-#     def __repr__(self):
-#         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels, self.out_channels)
-
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
     def __init__(self, node_features: int, num_layers: int, k: int, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.node_features = node_features
-        self.num_layers = num_layers
+        self.num_layers = num_timesteps
         self.k = k
         self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
         self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
@@ -403,21 +372,20 @@ class NRIDecoder_Recurrent(MessagePassing):
         if x.size(-1) < self.node_features:
             zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
             x = torch.cat([x, zero], dim=1)
-
-        for i in range(self.num_layers):
-            m = self.propagate(x=x, edge_index=edge_index, z=z, size=None)
-            x = self.rnn(x, m)
+            
+        h = torch.zeros(x.size())
+        for i in range(self.num_timesteps):
+            m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
+            h = self.rnn(x, m)
+            x = f_out(h)
         return x
 
     def message(self, x_i, x_j, z):
         edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
-        k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+        k_list = [z[:,i].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         stack = torch.stack(k_list, dim=1)
         output = stack.sum(dim=1) # sum over k
         return output
-
-    def message_and_aggregate(self, adj_t, x):
-        return matmul(adj_t, x, reduce=self.aggr)
 
     def __repr__(self):
         return '{}({}, num_layers={})'.format(self.__class__.__name__,
