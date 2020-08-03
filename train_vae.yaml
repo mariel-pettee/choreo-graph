@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: nri-k4-pred10-
+  generateName: nri-k2-new-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,10 +11,10 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=nri_k4_pred10",
-    "--epochs=100",
+    "--name=nri_k2_new",
+    "--epochs=20",
     "--predicted_timesteps=10",
-#     "--edge_embedding_dim=2", # this is k, i.e. number of edge types
+    "--edge_embedding_dim=2", # this is k, i.e. number of edge types
     ]
     # command: ["sleep", "infinity"]
     image: amr-registry.caas.intel.com/aipg/mpettee-pytorch-geometric

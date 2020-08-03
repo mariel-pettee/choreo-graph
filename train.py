@@ -162,7 +162,7 @@ def train_model(epochs):
             ### CALCULATE LOSS
             train_reco_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps.item()
             if args.predicted_timesteps > 0: 
-                train_pred_loss = prediction_to_reconstruction_loss_ratio*mse_loss(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
+                train_pred_loss = prediction_to_reconstruction_loss_ratio*nll_gaussian(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
                 train_loss = train_reco_loss + train_pred_loss
             else:
                 train_loss = train_reco_loss
