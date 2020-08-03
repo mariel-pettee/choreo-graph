@@ -343,7 +343,7 @@ class NRIDecoder(torch.nn.Module):
         self.output_size = output_size
         self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
-        self.node_transform = Sequential(Linear(self.hidden_size, self.output_size), ReLU())
+        self.node_transform = Sequential(Linear(self.node_features, self.output_size), ReLU())
         self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
                                                    k=self.edge_embedding_dim, 
@@ -352,9 +352,9 @@ class NRIDecoder(torch.nn.Module):
                                                    f_out_2=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
                                                   )
     def forward(self, x, edge_index, z):
-        x = self.rnn_graph_conv(x, edge_index, z)
-#         node_features = self.node_transform(x) # transform back into real coordinates
-        return x
+        h = self.rnn_graph_conv(x, edge_index, z)
+        mu = self.node_transform(x + h) ### FIX ME?
+        return mu
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
