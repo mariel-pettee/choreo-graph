@@ -235,30 +235,32 @@ for i in range(53):
         entry.append([j])
         cloud_idxs.append(entry)
 
-# print(len(skeleton_idxs))
-# print(len(cloud_idxs))
-
 all_idxs = skeleton_idxs+cloud_idxs
 
-# print(len(all_idxs))
-
 # calculate the coordinates for the lines
-def get_line_segments(seq, zcolor=None, cmap=None, cloud=False):
+def get_line_segments(seq, zcolor=None, cmap=None, cloud=False, edge_types=None, edge_class=None):
     xline = np.zeros((seq.shape[0],len(all_idxs),3,2))
     if cmap:
         colors = np.zeros((len(all_idxs), 4))
-    for i,(g1,g2) in enumerate(all_idxs):
-        xline[:,i,:,0] = np.mean(seq[:,g1], axis=1)
-        xline[:,i,:,1] = np.mean(seq[:,g2], axis=1)
-        if cmap is not None:
-            colors[i] = cmap(0.5*(zcolor[g1].mean() + zcolor[g2].mean()))
+    for edge,(joint1,joint2) in enumerate(all_idxs):
+        xline[:,edge,:,0] = np.mean(seq[:,joint1], axis=1)
+        xline[:,edge,:,1] = np.mean(seq[:,joint2], axis=1)    
+        if cmap:
+            if edge_types is not None:
+                if edge > len(skeleton_idxs)-1: # cloud edges
+                    if edge_types[edge-len(skeleton_idxs), edge_class] == 1:
+                        colors[edge] = cmap(1)
+                    else:
+                        colors[edge] = cmap(0)
+            else:
+                colors[edge] = cmap(0)
     if cmap:
         return xline, colors
     else:
         return xline
     
 # put line segments on the given axis, with given colors
-def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False):
+def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_types=None, edge_class=None):
     lines = []
     ### Main skeleton
     for i in tqdm(range(len(skeleton_idxs)), desc="Skeleton lines"):
@@ -266,13 +268,15 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False):
             c = color[i]
         else:
             c = color
-        l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
-                np.linspace(segments[i,1,0],segments[i,1,1],2),
-                np.linspace(segments[i,2,0],segments[i,2,1],2),
-                color=c,
-                alpha=alpha,
-                lw=lw)[0]
-        lines.append(l)
+            
+        ### THESE LINES PLOT THE MAIN SKELETON
+#         l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
+#                 np.linspace(segments[i,1,0],segments[i,1,1],2),
+#                 np.linspace(segments[i,2,0],segments[i,2,1],2),
+#                 color=c,
+#                 alpha=alpha,
+#                 lw=lw)[0]
+#         lines.append(l)
     
     if cloud:
         ### Cloud of all-connected joints
@@ -281,13 +285,18 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False):
                 c = color[i]
             else:
                 c = color
-            l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
-                    np.linspace(segments[i,1,0],segments[i,1,1],2),
-                    np.linspace(segments[i,2,0],segments[i,2,1],2),
-                    color=c,
-                    alpha=0.03,
-                    lw=lw)[0]
-            lines.append(l)
+            ### plot or don't plot lines based on edge class
+            if edge_types is not None and edge_class is not None:
+                custom_colors = ["deeppink","black","red","blue"]
+                if edge_types[i-len(skeleton_idxs)][edge_class] == 1:
+                    l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
+                            np.linspace(segments[i,1,0],segments[i,1,1],2),
+                            np.linspace(segments[i,2,0],segments[i,2,1],2),
+#                                 color=c,
+                            color=custom_colors[edge_class],
+                            alpha=0.03,
+                            lw=lw)[0]
+                    lines.append(l)
     return lines
 
 # animate a video of the stick figure.
@@ -297,7 +306,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False):
 # by that amount.
 # `zcolor` may be an N-length array, where N is the number of vertices in seq, and will
 # be used to color the vertices. Typically this is set to the avg. z-value of each vtx.
-def animate_stick(seq, ghost=None, ghost_shift=0, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
+def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=None, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
                   dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False):
     if zcolor is None:
         zcolor = np.zeros(seq.shape[1])
@@ -321,7 +330,20 @@ def animate_stick(seq, ghost=None, ghost_shift=0, figsize=None, zcolor=None, poi
     
     cm = matplotlib.cm.get_cmap(cmap)
     
-    pts = ax.scatter(seq[0,:,0],seq[0,:,1],seq[0,:,2], c=zcolor, s=dot_size, cmap=cm, alpha=dot_alpha)
+    if edge_types is not None:
+        num_connections = np.zeros((53))
+        for edge,(joint1,joint2) in enumerate(all_idxs):
+            if edge > len(skeleton_idxs) and edge_types[edge - len(skeleton_idxs),edge_class] == 1:
+                num_connections[joint1] += 1
+                num_connections[joint2] += 1
+        num_connections = num_connections/np.sum(num_connections) # normalize so colormap can use values between 0 and 1
+#         print(num_connections)
+        dot_color = [cm(num_connections[joint]) for joint in range(53)]
+        pts = ax.scatter(seq[0,:,0],seq[0,:,1],seq[0,:,2], c=dot_color, s=dot_size, cmap=cm, alpha=dot_alpha)
+
+    else:
+        dot_color = "black"
+        pts = ax.scatter(seq[0,:,0],seq[0,:,1],seq[0,:,2], c=dot_color, s=dot_size, cmap=cm, alpha=dot_alpha)
     
     ghost_color = 'blue'
 
@@ -333,8 +355,8 @@ def animate_stick(seq, ghost=None, ghost_shift=0, figsize=None, zcolor=None, poi
         ax.set_ylim(*ax_lims)
         ax.set_zlim(0,ax_lims[1]-ax_lims[0])
     plt.close(fig)
-    xline, colors = get_line_segments(seq, zcolor, cm)
-    lines = put_lines(ax, xline[0], colors, lw=lw, alpha=0.9, cloud=cloud)
+    xline, colors = get_line_segments(seq, zcolor, cm, edge_types=edge_types, edge_class=edge_class)
+    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, edge_types=edge_types, edge_class=edge_class)
     
     if ghost is not None:
         xline_g = get_line_segments(ghost)
