@@ -78,7 +78,7 @@ class NRI(torch.nn.Module):
         edge_embedding = self.encoder(batch)
         z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
         output = self.decoder(batch.x, batch.edge_index, z)
-        return output
+        return output, F.softmax(edge_embedding, dim=-1)
     
 ### VAE MODULES 
 
@@ -251,7 +251,7 @@ class NRIEncoder(torch.nn.Module):
         self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
                   ReLU(), 
                   Linear(self.hidden_size, self.node_embedding_dim))
-        self.mlp_eqn_8 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
+        self.mlp_eqn_8 = Sequential(Linear(4*self.node_embedding_dim, self.hidden_size), 
                       ReLU(), 
                       Linear(self.hidden_size, self.edge_embedding_dim))
         self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
@@ -263,12 +263,21 @@ class NRIEncoder(torch.nn.Module):
 
     def forward(self, data):
         node_embedding = self.node_embedding_eqn_5(data.x)
+        
+        x_skip = node_embedding
+        source_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[0])
+        destination_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[1])
+        edge_messages_skip = torch.cat([source_node_features_skip, destination_node_features_skip], dim=1)
+        
         node_embedding = self.graph_conv(node_embedding, data.edge_index)
         source_node_features = torch.index_select(node_embedding, 0, data.edge_index[0])
         destination_node_features = torch.index_select(node_embedding, 0, data.edge_index[1])
         edge_messages = torch.cat([source_node_features, destination_node_features], dim=1)
-        edge_embedding = self.mlp_eqn_8(edge_messages)
+        
+        final_concat = torch.cat([edge_messages, edge_messages_skip], axis=1)
+        edge_embedding = self.mlp_eqn_8(final_concat)
         return edge_embedding
+    
     
 class NRIGraphConv(MessagePassing):
     """Heavily inspired by NNConv; used for the NRI Encoder."""
@@ -315,13 +324,12 @@ class NRIGraphConv(MessagePassing):
         return self.propagate(edge_index, x=x)
 
     def message(self, x_i, x_j):
-        node_features = torch.cat([x_i,x_j], dim=1).detach().clone()
-        return self.nn(node_features)
+        edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
+        edge_features = self.nn(edge_features)
+        return edge_features
 
     def update(self, aggr_out, x):
         aggr_out = self.nn_2(aggr_out) 
-
-        # Potentially use x to do skip_connection here 
         
         if self.root is not None:
             aggr_out = aggr_out + torch.mm(x, self.root)
