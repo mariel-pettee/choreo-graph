@@ -40,6 +40,7 @@ parser.add_argument('--reduced_joints', action='store_true', default=False, help
 parser.add_argument('--skip_connection', type=bool, default=True, help='Enables skip connection in the encoder.')
 parser.add_argument('--dynamic_graph', type=bool, default=False, help='Enables dynamic graph re-computation per timestep during testing.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
+parser.add_argument('--no_cuda', action='store_true', default=False, help="Don't use GPU, even if available.")
 parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
 print(args)
@@ -106,14 +107,15 @@ model = NRI(node_features=node_features,
             seq_len=args.seq_len,
             skip_connection=args.skip_connection,
             dynamic_graph=args.dynamic_graph,
-            output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
 
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-device = 'cpu' ## Hard-coded for now, since memory requirements will force us to use CPU 
+if args.no_cuda:
+    device = 'cpu'
+else:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print("\nUsing {}".format(device), file=log)
 model = model.to(device)
@@ -122,7 +124,6 @@ print(model)
 print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
-
 
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):

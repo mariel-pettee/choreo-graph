@@ -50,14 +50,13 @@ class VAE(torch.nn.Module):
     
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, output_size, seq_len):
+    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len):
         super(NRI, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
         self.edge_features = edge_features
         self.edge_embedding_dim = edge_embedding_dim
         self.hidden_size = hidden_size
-        self.output_size = output_size
         self.seq_len = seq_len
         self.skip_connection = skip_connection
         self.dynamic_graph = dynamic_graph
@@ -70,7 +69,6 @@ class NRI(torch.nn.Module):
             edge_embedding_dim=self.edge_embedding_dim,
         )
         self.decoder = NRIDecoder(
-            output_size=self.output_size,
             seq_len=self.seq_len,
             node_features=self.node_features,
             dynamic_graph=self.dynamic_graph,
@@ -359,11 +357,10 @@ class NRIGraphConv(MessagePassing):
 
 class NRIDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, node_features, hidden_size, output_size, seq_len, dynamic_graph, encoder, edge_embedding_dim):
+    def __init__(self, node_features, hidden_size, seq_len, dynamic_graph, encoder, edge_embedding_dim):
         super(NRIDecoder, self).__init__()
         self.node_features = node_features
         self.hidden_size = hidden_size
-        self.output_size = output_size
         self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
