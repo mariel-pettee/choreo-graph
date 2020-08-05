@@ -38,6 +38,7 @@ parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number 
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
 parser.add_argument('--skip_connection', type=bool, default=True, help='Enables skip connection in the encoder.')
+parser.add_argument('--dynamic_graph', type=bool, default=False, help='Enables dynamic graph re-computation per timestep during testing.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
 parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
@@ -104,6 +105,7 @@ model = NRI(node_features=node_features,
             edge_embedding_dim=args.edge_embedding_dim,
             seq_len=args.seq_len,
             skip_connection=args.skip_connection,
+            dynamic_graph=args.dynamic_graph,
             output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
 

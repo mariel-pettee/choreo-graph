@@ -7,7 +7,7 @@ from torch.nn import Parameter, ModuleList
 from torch.autograd import Variable
 import torch.nn.functional as F
 from .functions import *
-
+from torch_geometric.data import Data
 # import pdb; pdb.set_trace()
 
 #### UMBRELLA MODELS
@@ -50,7 +50,7 @@ class VAE(torch.nn.Module):
     
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, output_size, seq_len):
+    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, output_size, seq_len):
         super(NRI, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
@@ -60,6 +60,7 @@ class NRI(torch.nn.Module):
         self.output_size = output_size
         self.seq_len = seq_len
         self.skip_connection = skip_connection
+        self.dynamic_graph = dynamic_graph
         self.encoder = NRIEncoder(
             node_features=self.node_features, 
             edge_features=self.edge_features, 
@@ -72,6 +73,8 @@ class NRI(torch.nn.Module):
             output_size=self.output_size,
             seq_len=self.seq_len,
             node_features=self.node_features,
+            dynamic_graph=self.dynamic_graph,
+            encoder=self.encoder,
             edge_embedding_dim=self.edge_embedding_dim,
             hidden_size=self.hidden_size,
         )
@@ -356,15 +359,19 @@ class NRIGraphConv(MessagePassing):
 
 class NRIDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, node_features, hidden_size, output_size, seq_len, edge_embedding_dim):
+    def __init__(self, node_features, hidden_size, output_size, seq_len, dynamic_graph, encoder, edge_embedding_dim):
         super(NRIDecoder, self).__init__()
         self.node_features = node_features
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
+        self.dynamic_graph = dynamic_graph
+        self.encoder = encoder
         self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
+                                                   dynamic_graph=self.dynamic_graph,
+                                                   encoder=self.encoder,
                                                    k=self.edge_embedding_dim, 
                                                    hidden_size=self.hidden_size,
                                                    f_out=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
@@ -377,7 +384,7 @@ class NRIDecoder(torch.nn.Module):
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
-    def __init__(self, node_features: int, seq_len: int, k: int, f_out, f_out_2, hidden_size: int, aggr: str = 'add', bias: bool = True, **kwargs):
+    def __init__(self, node_features: int, seq_len: int, k: int, f_out, f_out_2, hidden_size: int, encoder: None, dynamic_graph: bool = False, aggr: str = 'add', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.node_features = node_features
         self.seq_len = seq_len
@@ -385,6 +392,8 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
         self.f_out = f_out
         self.f_out_2 = f_out_2
+        self.dynamic_graph = dynamic_graph
+        self.encoder = encoder
         self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
         self.reset_parameters()
 
@@ -399,11 +408,13 @@ class NRIDecoder_Recurrent(MessagePassing):
             zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
             x = torch.cat([x, zero], dim=1)
                     
-        ## if dynamic_graph: 
-        ## resample to get a new z
-            
         h = torch.zeros(x.size())
         for timestep in range(self.seq_len):
+            if self.dynamic_graph: 
+                ### Resample to get a new z at each timestep 
+                batch = Data(x=x, edge_index=edge_index)
+                edge_embedding = self.encoder(batch)
+                z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
             if h.size() == x.size():
                 m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
             else:
