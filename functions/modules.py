@@ -50,7 +50,7 @@ class VAE(torch.nn.Module):
     
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim, output_size, seq_len):
+    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, output_size, seq_len):
         super(NRI, self).__init__()
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
@@ -59,10 +59,12 @@ class NRI(torch.nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.seq_len = seq_len
+        self.skip_connection = skip_connection
         self.encoder = NRIEncoder(
             node_features=self.node_features, 
             edge_features=self.edge_features, 
             hidden_size=self.hidden_size, 
+            skip_connection=self.skip_connection,
             node_embedding_dim=self.node_embedding_dim,
             edge_embedding_dim=self.edge_embedding_dim,
         )
@@ -237,13 +239,14 @@ class MLPGraphConv(MessagePassing): # Heavily inspired by NNConv
 
 class NRIEncoder(torch.nn.Module):
     """Encoder for fully-connected graph inputs"""
-    def __init__(self, node_features, edge_features, hidden_size, node_embedding_dim, edge_embedding_dim):
+    def __init__(self, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim):
         super(NRIEncoder, self).__init__()
         self.node_features = node_features
         self.edge_features = edge_features
         self.hidden_size  = hidden_size
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
+        self.skip_connection = skip_connection
         self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
         self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
                       ReLU(), 
@@ -251,9 +254,14 @@ class NRIEncoder(torch.nn.Module):
         self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
                   ReLU(), 
                   Linear(self.hidden_size, self.node_embedding_dim))
-        self.mlp_eqn_8 = Sequential(Linear(4*self.node_embedding_dim, self.hidden_size), 
-                      ReLU(), 
-                      Linear(self.hidden_size, self.edge_embedding_dim))
+        if self.skip_connection:
+            self.mlp_eqn_8 = Sequential(Linear(4*self.node_embedding_dim, self.hidden_size), 
+                          ReLU(), 
+                          Linear(self.hidden_size, self.edge_embedding_dim))
+        else:
+            self.mlp_eqn_8 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
+                          ReLU(), 
+                          Linear(self.hidden_size, self.edge_embedding_dim))
         self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
                                         out_channels=self.node_embedding_dim, 
                                         nn=self.mlp_eqn_6, nn_2=self.mlp_eqn_7, 
@@ -264,18 +272,22 @@ class NRIEncoder(torch.nn.Module):
     def forward(self, data):
         node_embedding = self.node_embedding_eqn_5(data.x)
         
-        x_skip = node_embedding
-        source_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[0])
-        destination_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[1])
-        edge_messages_skip = torch.cat([source_node_features_skip, destination_node_features_skip], dim=1)
+        if self.skip_connection:
+            x_skip = node_embedding
+            source_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[0])
+            destination_node_features_skip = torch.index_select(x_skip, 0, data.edge_index[1])
+            edge_messages_skip = torch.cat([source_node_features_skip, destination_node_features_skip], dim=1)
         
         node_embedding = self.graph_conv(node_embedding, data.edge_index)
         source_node_features = torch.index_select(node_embedding, 0, data.edge_index[0])
         destination_node_features = torch.index_select(node_embedding, 0, data.edge_index[1])
         edge_messages = torch.cat([source_node_features, destination_node_features], dim=1)
         
-        final_concat = torch.cat([edge_messages, edge_messages_skip], axis=1)
-        edge_embedding = self.mlp_eqn_8(final_concat)
+        if self.skip_connection:
+            final_concat = torch.cat([edge_messages, edge_messages_skip], axis=1)
+            edge_embedding = self.mlp_eqn_8(final_concat)
+        else:
+            edge_embedding = self.mlp_eqn_8(edge_messages)
         return edge_embedding
     
     
@@ -351,7 +363,6 @@ class NRIDecoder(torch.nn.Module):
         self.output_size = output_size
         self.seq_len = seq_len
         self.edge_embedding_dim = edge_embedding_dim
-        self.node_transform = Sequential(Linear(self.node_features, self.output_size), ReLU())
         self.rnn_graph_conv = NRIDecoder_Recurrent(node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
                                                    k=self.edge_embedding_dim, 
@@ -361,8 +372,8 @@ class NRIDecoder(torch.nn.Module):
                                                   )
     def forward(self, x, edge_index, z):
         h = self.rnn_graph_conv(x, edge_index, z)
-        mu = self.node_transform(x + h) ### FIX ME?
-        return mu
+        mus = x + h
+        return mus
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
@@ -387,6 +398,9 @@ class NRIDecoder_Recurrent(MessagePassing):
         if x.size(-1) < self.node_features:
             zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
             x = torch.cat([x, zero], dim=1)
+                    
+        ## if dynamic_graph: 
+        ## resample to get a new z
             
         h = torch.zeros(x.size())
         for timestep in range(self.seq_len):

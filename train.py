@@ -37,6 +37,7 @@ parser.add_argument('--pred_to_reco_ratio', type=float, default=1., help='How to
 parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
+parser.add_argument('--skip_connection', type=bool, default=True, help='Enables skip connection in the encoder.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
 parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
@@ -102,6 +103,7 @@ model = NRI(node_features=node_features,
             node_embedding_dim=args.node_embedding_dim,
             edge_embedding_dim=args.edge_embedding_dim,
             seq_len=args.seq_len,
+            skip_connection=args.skip_connection,
             output_size=node_features+args.predicted_timesteps*data.n_dim,
            )
 
@@ -137,26 +139,26 @@ prediction_to_reconstruction_loss_ratio = args.pred_to_reco_ratio # you might wa
 
 def train_model(epochs):
     train_losses = []
-    train_reco_losses = []
-    train_pred_losses = []
+    train_mse_losses = []
+    train_nll_losses = []
     train_kl_losses = []
     val_losses = []
-    val_reco_losses = []
-    val_pred_losses = []
+    val_mse_losses = []
+    val_nll_losses = []
     val_kl_losses = []
+    
     for epoch in range(epochs):
         model.train()
         t = time.time()
         n_batches = 0
         total_train_loss = 0
-        total_train_reco_loss = 0
-        total_train_pred_loss = 0
+        total_train_mse_loss = 0
+        total_train_nll_loss = 0
         total_train_kl_loss = 0
         total_val_loss = 0
-        total_val_reco_loss = 0
-        total_val_pred_loss = 0
+        total_val_mse_loss = 0
+        total_val_nll_loss = 0
         total_val_kl_loss = 0
-
         
         ### TRAINING LOOP
         for batch in dataloader_train:
@@ -166,21 +168,17 @@ def train_model(epochs):
             output, probabilities = model(batch)
             
             ### CALCULATE LOSS
-            train_reco_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps.item()
-            if args.predicted_timesteps > 0: 
-                train_pred_loss = prediction_to_reconstruction_loss_ratio*nll_gaussian(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
-                train_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
-                train_loss = train_reco_loss + train_pred_loss + train_kl_loss
-            else:
-                train_loss = train_reco_loss
+            train_mse_loss = mse_loss(output, batch.x.to(device)) # just calculate this for comparison; it's not added to the loss
+            train_nll_loss = nll_gaussian(output, batch.x.to(device))
+            train_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
+            train_loss = train_nll_loss + train_kl_loss
 
             ### ADD LOSSES TO TOTALS
             total_train_loss += train_loss.item()
-            total_train_reco_loss += train_reco_loss.item()
-            if args.predicted_timesteps > 0: 
-                total_train_pred_loss += train_pred_loss.item()
-                total_train_kl_loss += train_kl_loss.item()
-
+            total_train_mse_loss += train_mse_loss.item()
+            total_train_nll_loss += train_nll_loss.item()
+            total_train_kl_loss += train_kl_loss.item()
+            
             ### BACKPROPAGATE
             optimizer.zero_grad() # reset the gradients to zero
             train_loss.backward()
@@ -199,20 +197,16 @@ def train_model(epochs):
             output, probabilities = model(batch)
             
             ### CALCULATE LOSS
-            val_reco_loss = mse_loss(batch.x.to(device), output[:,:node_features]) # compare first seq_len timesteps.item()
-            if args.predicted_timesteps > 0: 
-                val_pred_loss = prediction_to_reconstruction_loss_ratio*nll_gaussian(batch.y.to(device), output[:,node_features:]) # compare last part to unseen data
-                val_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
-                val_loss = val_reco_loss + val_pred_loss + val_kl_loss
-            else:
-                val_loss = val_reco_loss
+            val_mse_loss = mse_loss(output, batch.x.to(device)) # just for comparison
+            val_nll_loss = nll_gaussian(output, batch.x.to(device))
+            val_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
+            val_loss = val_nll_loss + val_kl_loss
 
             ### ADD LOSSES TO TOTALS
             total_val_loss += val_loss.item()
-            total_val_reco_loss += val_reco_loss.item()
-            if args.predicted_timesteps > 0: 
-                total_val_pred_loss += val_pred_loss.item()
-                total_val_kl_loss += val_kl_loss.item()
+            total_val_mse_loss += val_mse_loss.item()
+            total_val_nll_loss += val_nll_loss.item()
+            total_val_kl_loss += val_kl_loss.item()
 
             ### OPTIONAL -- STOP TRAINING EARLY
             n_batches += 1
@@ -220,53 +214,54 @@ def train_model(epochs):
         
         ### CALCULATE AVERAGE LOSSES PER EPOCH   
         epoch_train_loss = total_train_loss / n_batches
-        epoch_train_reco_loss = total_train_reco_loss / n_batches
-        epoch_train_pred_loss = total_train_pred_loss / n_batches
+        epoch_train_mse_loss = total_train_mse_loss / n_batches
+        epoch_train_nll_loss = total_train_nll_loss / n_batches
         epoch_train_kl_loss = total_train_kl_loss / n_batches
 
         train_losses.append(epoch_train_loss) 
-        train_reco_losses.append(epoch_train_reco_loss)
-        train_pred_losses.append(epoch_train_pred_loss)
+        train_mse_losses.append(epoch_train_mse_loss)
+        train_nll_losses.append(epoch_train_nll_loss)
         train_kl_losses.append(epoch_train_kl_loss)
 
         epoch_val_loss = total_val_loss / n_batches
-        epoch_val_reco_loss = total_val_reco_loss / n_batches
-        epoch_val_pred_loss = total_val_pred_loss / n_batches
+        epoch_val_mse_loss = total_val_mse_loss / n_batches
+        epoch_val_nll_loss = total_val_nll_loss / n_batches
         epoch_val_kl_loss = total_val_kl_loss / n_batches
 
         val_losses.append(epoch_val_loss) 
-        val_reco_losses.append(epoch_val_reco_loss)
-        val_pred_losses.append(epoch_val_pred_loss)
+        val_mse_losses.append(epoch_val_mse_loss)
+        val_nll_losses.append(epoch_val_nll_loss)
         val_kl_losses.append(epoch_val_kl_loss)
 
         ### Print to log file
-        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,.4f} | train_mse_loss: {:,.4f} | train_nll_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_mse_loss: {:,.4f} | val_nll_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
-            epoch_train_reco_loss, 
-            epoch_train_pred_loss,
+            epoch_train_mse_loss,
+            epoch_train_nll_loss,
             epoch_train_kl_loss,
             epoch_val_loss,
-            epoch_val_reco_loss, 
-            epoch_val_pred_loss,
+            epoch_val_mse_loss,
+            epoch_val_nll_loss,
             epoch_val_kl_loss,
             time.time() - t),
             file=log)
         log.flush()
         ### Print to console
-        print("epoch : {}/{} | train_loss = {:,.4f} | train_reco_loss: {:,.4f} | train_pred_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_reco_loss: {:,.4f} | val_pred_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
-                    epoch+1, 
+        print("epoch : {}/{} | train_loss = {:,.4f} | train_mse_loss: {:,.4f} | train_nll_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_mse_loss: {:,.4f} | val_nll_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
+            epoch+1, 
             epochs, 
             epoch_train_loss,
-            epoch_train_reco_loss, 
-            epoch_train_pred_loss,
+            epoch_train_mse_loss,
+            epoch_train_nll_loss,
             epoch_train_kl_loss,
             epoch_val_loss,
-            epoch_val_reco_loss, 
-            epoch_val_pred_loss,
+            epoch_val_mse_loss,
+            epoch_val_nll_loss,
             epoch_val_kl_loss,
-            time.time() - t))
+            time.time() - t),
+            )
         
         if epoch == 0 and not checkpoint_loaded: best_loss = epoch_val_loss
         elif epoch == 0 and checkpoint_loaded: best_loss = min(epoch_val_loss, loss_checkpoint)
@@ -284,13 +279,15 @@ def train_model(epochs):
             print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path))
 
     loss_dict = {
-	"train_losses": train_losses,
-	"train_reco_losses": train_reco_losses,
-	"train_pred_losses": train_pred_losses,
-	"val_losses": val_losses,
-	"val_reco_losses": val_reco_losses,
-	"val_pred_losses": val_pred_losses,
-			}
+    "train_losses": train_losses,
+    "train_mse_losses": train_mse_losses,
+    "train_nll_losses": train_nll_losses,
+    "train_kl_losses": train_kl_losses,
+    "val_losses": val_losses,
+    "val_mse_losses": val_mse_losses,
+    "val_nll_losses": val_nll_losses,
+    "val_kl_losses": val_kl_losses,
+    }
 
     with open(os.path.join(save_folder,'losses.json'), 'w') as f:
 	    json.dump(loss_dict, f)
