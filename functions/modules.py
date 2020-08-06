@@ -412,6 +412,7 @@ class NRIDecoder_Recurrent(MessagePassing):
                 batch = Data(x=x, edge_index=edge_index)
                 edge_embedding = self.encoder(batch)
                 z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
+            if torch.cuda.is_available(): h = h.cuda()
             if h.size() == x.size():
                 m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
             else:
@@ -422,7 +423,10 @@ class NRIDecoder_Recurrent(MessagePassing):
 
     def message(self, x_i, x_j, z):
         edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
-        k_list = [z[:,i].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+        if torch.cuda.is_available():
+            k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+        else:
+            k_list = [z[:,i].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         stack = torch.stack(k_list, dim=1)
         output = stack.sum(dim=1) # sum over k
         return output

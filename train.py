@@ -164,7 +164,7 @@ def train_model(epochs):
         total_val_kl_loss = 0
         
         ### TRAINING LOOP
-        for batch in dataloader_train:
+        for batch in tqdm(dataloader_train, desc="Train"):
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
@@ -193,7 +193,7 @@ def train_model(epochs):
         
         ### VALIDATION LOOP
         model.eval()
-        for batch in dataloader_val:
+        for batch in tqdm(dataloader_val, desc="Val"):
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
