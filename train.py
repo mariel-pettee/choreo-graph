@@ -84,6 +84,13 @@ print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_tra
 log.flush()
 print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]))
 
+if args.no_cuda:
+    device = 'cpu'
+else:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+print("\nUsing {}".format(device), file=log)
+
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
@@ -99,7 +106,8 @@ checkpoint_loaded = False
 #             output_size=node_features+args.predicted_timesteps*data.n_dim,
 #            )
 
-model = NRI(node_features=node_features, 
+model = NRI(device=device,
+            node_features=node_features, 
             edge_features=edge_features, 
             hidden_size=args.hidden_size, 
             node_embedding_dim=args.node_embedding_dim,
@@ -112,12 +120,6 @@ model = NRI(node_features=node_features,
 
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
 
-if args.no_cuda:
-    device = 'cpu'
-else:
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-print("\nUsing {}".format(device), file=log)
 model = model.to(device)
 print(model, file=log)
 print(model)

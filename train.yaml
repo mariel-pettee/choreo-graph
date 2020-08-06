@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: nri-skip-tiny-seq2-
+  generateName: nri-gpu-noskip-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,24 +11,24 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=nri_skip_tiny_seq2",
+    "--name=nri_gpu_noskip",
     "--epochs=20",
-    "--batch_size=2",
-    "--hidden_size=32",
-    "--node_embedding_dim=32",
+    "--batch_size=12",
+#     "--hidden_size=256",
+    "--node_embedding_dim=36",
 #     "--predicted_timesteps=10",
-    "--edge_embedding_dim=2", # this is k, i.e. number of edge types
-    "--seq_len=2",
-    "--skip_connection",
+#     "--edge_embedding_dim=2", # this is k, i.e. number of edge types
+    "--seq_len=6",
+#     "--skip_connection",
     ]
     # command: ["sleep", "infinity"]
     image: amr-registry.caas.intel.com/aipg/mpettee-pytorch-geometric
     workingDir: /workspace/choreo-graph/
     resources:
       limits:
-        nvidia.com/gpu: 0
-        cpu: 2
-        memory: 300Gi
+        nvidia.com/gpu: 1
+        cpu: 11
+        memory: 30Gi
     volumeMounts:
     - mountPath: "/workspace"
       name: workspace 
