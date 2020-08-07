@@ -205,7 +205,7 @@ def train_model(epochs):
             val_mse_loss = mse_loss(output, batch.x.to(device)) # just for comparison
             val_nll_loss = nll_gaussian(output, batch.x.to(device))
             val_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
-            val_loss = val_nll_loss + val_kl_loss
+            val_loss = val_nll_loss # note: don't add KL loss
 
             ### ADD LOSSES TO TOTALS
             total_val_loss += val_loss.item()
