@@ -215,7 +215,7 @@ def train_model(epochs):
             total_val_mse_loss += val_mse_loss.item()
             total_val_nll_loss += val_nll_loss.item()
             total_val_kl_loss += val_kl_loss.item()
-            
+
             ### OPTIONAL -- STOP TRAINING EARLY
             n_val_batches += 1
             if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
