@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch_geometric.data import DataLoader
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_networkx
+torch.manual_seed(0)
 
 import networkx as nx # for visualizing graphs
 import numpy as np
@@ -129,14 +130,15 @@ log.flush()
 
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):
-    print("Loading saved checkpoint from {}...".format(checkpoint_path), file=log)
-    log.flush()
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
+    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint), file=log)
+    log.flush()
+    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint))
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
@@ -156,6 +158,7 @@ def train_model(epochs):
         model.train()
         t = time.time()
         n_batches = 0
+        n_val_batches = 0
         total_train_loss = 0
         total_train_mse_loss = 0
         total_train_nll_loss = 0
@@ -171,7 +174,7 @@ def train_model(epochs):
             
             ### CALCULATE MODEL OUTPUTS
             output, probabilities = model(batch)
-            
+
             ### CALCULATE LOSS
             train_mse_loss = mse_loss(output, batch.x.to(device)) # just calculate this for comparison; it's not added to the loss
             train_nll_loss = nll_gaussian(output, batch.x.to(device))
@@ -212,10 +215,10 @@ def train_model(epochs):
             total_val_mse_loss += val_mse_loss.item()
             total_val_nll_loss += val_nll_loss.item()
             total_val_kl_loss += val_kl_loss.item()
-
+            
             ### OPTIONAL -- STOP TRAINING EARLY
-            n_batches += 1
-            if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # temporary -- for stopping training early
+            n_val_batches += 1
+            if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
         
         ### CALCULATE AVERAGE LOSSES PER EPOCH   
         epoch_train_loss = total_train_loss / n_batches
@@ -239,7 +242,7 @@ def train_model(epochs):
         val_kl_losses.append(epoch_val_kl_loss)
 
         ### Print to log file
-        print("epoch : {}/{} | train_loss = {:,.4f} | train_mse_loss: {:,.4f} | train_nll_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_mse_loss: {:,.4f} | val_nll_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
@@ -254,7 +257,7 @@ def train_model(epochs):
             file=log)
         log.flush()
         ### Print to console
-        print("epoch : {}/{} | train_loss = {:,.4f} | train_mse_loss: {:,.4f} | train_nll_loss: {:,.4f} | train_kl_loss = {:,.4f} | val_loss = {:,.4f} | val_mse_loss: {:,.4f} | val_nll_loss: {:,.4f} | val_kl_loss: {:,.4f} | time: {:.4f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
@@ -268,9 +271,22 @@ def train_model(epochs):
             time.time() - t),
             )
         
-        if epoch == 0 and not checkpoint_loaded: best_loss = epoch_val_loss
-        elif epoch == 0 and checkpoint_loaded: best_loss = min(epoch_val_loss, loss_checkpoint)
-            
+        if epoch == 0:
+            ### Checkpoint the first epoch
+            if checkpoint_loaded: 
+                best_loss = min(epoch_val_loss, loss_checkpoint)
+            else:
+                best_loss = epoch_val_loss
+                torch.save({
+                 'epoch': epoch,
+                 'model_state_dict': model.state_dict(),
+                 'optimizer_state_dict': optimizer.state_dict(),
+                 'loss': best_loss,
+                 }, checkpoint_path)
+                print("Saved model checkpoint to {}.".format(checkpoint_path), file=log)
+                log.flush()
+                print("Saved model checkpoint to {}.".format(checkpoint_path))
+                        
         if epoch_val_loss < best_loss:
             best_loss = epoch_val_loss
             torch.save({

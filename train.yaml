@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: nri-gpu-noskip-
+  generateName: nri-gpu-skip-seq49-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,14 +11,14 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=nri_gpu_noskip",
+    "--name=nri_gpu_skip_seq49",
     "--epochs=20",
     "--batch_size=12",
 #     "--hidden_size=256",
     "--node_embedding_dim=36",
 #     "--predicted_timesteps=10",
 #     "--edge_embedding_dim=2", # this is k, i.e. number of edge types
-    "--seq_len=6",
+    "--seq_len=49",
 #     "--skip_connection",
     ]
     # command: ["sleep", "infinity"]
