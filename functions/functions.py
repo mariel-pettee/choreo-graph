@@ -23,6 +23,9 @@ def gaussian_neg_log_likelihood(x, mu, sigma):
 
 def nll_gaussian(preds, target, variance=5e-5, add_const=False):
     neg_log_p = ((preds - target) ** 2 / (2 * variance))
+#     print("preds - target: Min:{:.6f} Max:{:.6f}".format((preds-target).min().item(), (preds-target).max().item()))
+#     print("numerator:", ((preds - target) ** 2).sum().item())
+#     print("neg_log_p sum:",neg_log_p.sum().item())
     if add_const:
         const = 0.5 * np.log(2 * np.pi * variance) # shouldn't this be multiplied by n?
         neg_log_p += const
