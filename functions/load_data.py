@@ -15,7 +15,7 @@ class MarielDataset(torch.utils.data.Dataset):
         self.data           = load_data(pattern=file_path) 
         self.xy_centering   = xy_centering
         self.n_joints       = 53
-        self.n_dim          = 3
+        self.n_dim          = 6
         self.predicted_timesteps = predicted_timesteps
         
         print("")
@@ -115,9 +115,7 @@ def load_data(pattern="data/mariel_*.npy"):
     ds_all *= 2/xy_range
     ds_all[:,:,:2] -= 1.0
 
-    # it's also useful to have these datasets centered, i.e. with the x and y offsets
-    # subtracted from each individual frame
-
+    ### It's also useful to have these datasets centered, i.e. with the x and y offsets subtracted from each individual frame:
     ds_all_centered = ds_all.copy()
     ds_all_centered[:,:,:2] -= ds_all_centered[:,:,:2].mean(axis=1,keepdims=True)
 
@@ -130,6 +128,13 @@ def load_data(pattern="data/mariel_*.npy"):
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
 
     low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
+    
+    ### Calculate velocities (first velocity is always 0)
+    velocities = np.vstack([np.zeros((1,53,3)),np.array([35*(ds_all[t+1,:,:] - ds_all[t,:,:]) for t in range(len(ds_all)-1)])]) # (delta_x/y/z per frame) * (35 frames/sec)
+    
+    ### Stack positions above velocities
+    ds_all = np.dstack([ds_all,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
+    ds_all_centered = np.dstack([ds_all_centered,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
 
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
