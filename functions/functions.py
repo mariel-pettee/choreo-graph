@@ -21,7 +21,7 @@ def gaussian_neg_log_likelihood(x, mu, sigma):
 #     constant = (len(sum_gaussian)/2)*np.log(2*np.pi*sigma**2)
 #     return sum_gaussian + constant
 
-def nll_gaussian(preds, target, variance, add_const=False):
+def nll_gaussian(preds, target, variance=5e-5, add_const=False):
     neg_log_p = ((preds - target) ** 2 / (2 * variance))
     if add_const:
         const = 0.5 * np.log(2 * np.pi * variance) # shouldn't this be multiplied by n?

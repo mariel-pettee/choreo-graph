@@ -260,7 +260,7 @@ def get_line_segments(seq, zcolor=None, cmap=None, cloud=False, edge_types=None,
         return xline
     
 # put line segments on the given axis, with given colors
-def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_types=None, edge_class=None):
+def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud=False, cloud_alpha=0.03, edge_types=None, edge_class=None):
     lines = []
     ### Main skeleton
     for i in tqdm(range(len(skeleton_idxs)), desc="Skeleton lines"):
@@ -269,14 +269,15 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_ty
         else:
             c = color
             
-        ### THESE LINES PLOT THE MAIN SKELETON
-#         l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
-#                 np.linspace(segments[i,1,0],segments[i,1,1],2),
-#                 np.linspace(segments[i,2,0],segments[i,2,1],2),
-#                 color=c,
-#                 alpha=alpha,
-#                 lw=lw)[0]
-#         lines.append(l)
+        if skeleton:
+            ### THESE LINES PLOT THE MAIN SKELETON
+            l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
+                    np.linspace(segments[i,1,0],segments[i,1,1],2),
+                    np.linspace(segments[i,2,0],segments[i,2,1],2),
+                    color=c,
+                    alpha=alpha,
+                    lw=lw)[0]
+            lines.append(l)
     
     if cloud:
         ### Cloud of all-connected joints
@@ -287,14 +288,14 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_ty
                 c = color
             ### plot or don't plot lines based on edge class
             if edge_types is not None and edge_class is not None:
-                custom_colors = ["deeppink","black","red","blue"]
+                custom_colors = ["deeppink","black","red","blue","green","orange"]
                 if edge_types[i-len(skeleton_idxs)][edge_class] == 1:
                     l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
                             np.linspace(segments[i,1,0],segments[i,1,1],2),
                             np.linspace(segments[i,2,0],segments[i,2,1],2),
 #                                 color=c,
                             color=custom_colors[edge_class],
-                            alpha=0.03,
+                            alpha=cloud_alpha,
                             lw=lw)[0]
                     lines.append(l)
     return lines
@@ -307,7 +308,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, cloud=False, edge_ty
 # `zcolor` may be an N-length array, where N is the number of vertices in seq, and will
 # be used to color the vertices. Typically this is set to the avg. z-value of each vtx.
 def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=None, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
-                  dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False):
+                  dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False, cloud_alpha=0.03, skeleton=True):
     if zcolor is None:
         zcolor = np.zeros(seq.shape[1])
     fig = plt.figure(figsize=figsize)
@@ -356,11 +357,11 @@ def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=No
         ax.set_zlim(0,ax_lims[1]-ax_lims[0])
     plt.close(fig)
     xline, colors = get_line_segments(seq, zcolor, cm, edge_types=edge_types, edge_class=edge_class)
-    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, edge_types=edge_types, edge_class=edge_class)
+    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, cloud_alpha=cloud_alpha, edge_types=edge_types, edge_class=edge_class, skeleton=skeleton)
     
     if ghost is not None:
         xline_g = get_line_segments(ghost)
-        lines_g = put_lines(ax, xline_g[0], ghost_color, lw=lw, alpha=1.0, cloud=cloud)
+        lines_g = put_lines(ax, xline_g[0], ghost_color, lw=lw, alpha=1.0, cloud=cloud, cloud_alpha=cloud_alpha, skeleton=skeleton)
     
     if pointer is not None:
         vR = 0.15
