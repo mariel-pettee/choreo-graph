@@ -420,6 +420,9 @@ class NRIDecoder_Recurrent(MessagePassing):
             x = torch.cat([x, zero], dim=1)
                     
         h = torch.zeros(x.size()) # size: [batch_size * n_joints, seq_len*6]
+        # need to change x to size: [batch_size * n_joints, seq_len, 6]
+        # use squeeze if you get any complaints
+        # index x by timestep
         for timestep in range(2):
             if self.dynamic_graph: 
                 ### Resample to get a new z at each timestep 
@@ -432,7 +435,7 @@ class NRIDecoder_Recurrent(MessagePassing):
             else:
                 m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
             h = self.rnn(x, m)
-            x = self.f_out_2(h)
+            x = self.f_out_2(h) # remove this
         return x
 
     def message(self, x_i, x_j, z):

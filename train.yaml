@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: nri-gpu-skip-seq49-
+  generateName: seq49-batchlim10-50epochs-noskip-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,9 +11,10 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=nri_gpu_skip_seq49",
-    "--epochs=20",
+    "--name=seq49_batchlim10_50epochs_noskip",
+    "--epochs=50",
     "--batch_size=12",
+    "--batch_limit=10",
 #     "--hidden_size=256",
     "--node_embedding_dim=36",
 #     "--predicted_timesteps=10",

@@ -136,9 +136,9 @@ if os.path.isfile(checkpoint_path):
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
-    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint), file=log)
+    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint), file=log)
     log.flush()
-    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint))
+    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint))
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
