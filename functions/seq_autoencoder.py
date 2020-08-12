@@ -270,7 +270,7 @@ def get_line_segments(seq, zcolor=None, cmap=None, cloud=False, edge_types=None,
         return xline
     
 # put line segments on the given axis, with given colors
-def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud=False, cloud_alpha=0.03, threshold=0, edge_types=None, edge_opacities=None, edge_class=None):
+def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, skeleton_alpha=0.3, cloud=False, cloud_alpha=0.03, threshold=0, edge_types=None, edge_opacities=None, edge_class=None):
     lines = []
     ### Main skeleton
     for i in tqdm(range(len(skeleton_idxs)), desc="Skeleton lines"):
@@ -279,7 +279,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud
         else:
             c = color
                         
-        if skeleton: alpha=0.3
+        if skeleton: alpha=skeleton_alpha
         else: alpha=0
             
         ### THESE LINES PLOT THE MAIN SKELETON
@@ -335,7 +335,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud
 # `zcolor` may be an N-length array, where N is the number of vertices in seq, and will
 # be used to color the vertices. Typically this is set to the avg. z-value of each vtx.
 def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_opacities=None, threshold=0, edge_class=None, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
-                  dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False, cloud_alpha=0.03, skeleton=True):
+                  dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False, cloud_alpha=0.03, skeleton=True, skeleton_alpha=0.3):
     if zcolor is None:
         zcolor = np.zeros(seq.shape[1])
     fig = plt.figure(figsize=figsize)
@@ -384,11 +384,11 @@ def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_opacitie
         ax.set_zlim(0,ax_lims[1]-ax_lims[0])
     plt.close(fig)
     xline, colors = get_line_segments(seq, zcolor, cm, edge_types=edge_types, edge_class=edge_class)
-    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, cloud_alpha=cloud_alpha, edge_types=edge_types, edge_opacities=edge_opacities, threshold=threshold, edge_class=edge_class, skeleton=skeleton)
+    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, cloud_alpha=cloud_alpha, edge_types=edge_types, edge_opacities=edge_opacities, threshold=threshold, edge_class=edge_class, skeleton=skeleton, skeleton_alpha=skeleton_alpha)
     
     if ghost is not None:
         xline_g = get_line_segments(ghost)
-        lines_g = put_lines(ax, xline_g[0], ghost_color, lw=lw, alpha=1.0, cloud=cloud, cloud_alpha=cloud_alpha, skeleton=skeleton)
+        lines_g = put_lines(ax, xline_g[0], ghost_color, lw=lw, alpha=1.0, cloud=cloud, cloud_alpha=cloud_alpha, skeleton=skeleton, skeleton_alpha=skeleton_alpha)
     
     if pointer is not None:
         vR = 0.15
