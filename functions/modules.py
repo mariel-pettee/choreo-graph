@@ -380,7 +380,7 @@ class NRIDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.f_out = Sequential(Linear(self.hidden_size, int(self.node_features/6)), ReLU())
+        self.f_out = Sequential(Linear(self.hidden_size, int(self.node_features/self.seq_len)), ReLU())
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -436,13 +436,6 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.rnn.reset_parameters()
 
     def forward(self, x, edge_index, z, h):
-#         if x.size(-1) > self.node_features:
-#             raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
-        
-#         if x.size(-1) < self.node_features:
-#             zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
-#             x = torch.cat([x, zero], dim=1)
-        
         if self.dynamic_graph: 
             ### Resample to get a new z at each timestep 
             batch = Data(x=x, edge_index=edge_index)
