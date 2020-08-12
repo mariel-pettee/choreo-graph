@@ -377,6 +377,7 @@ class NRIDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
+        self.f_out = Sequential(Linear(self.hidden_size, self.node_features), ReLU())
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -385,16 +386,15 @@ class NRIDecoder(torch.nn.Module):
                                                    k=self.edge_embedding_dim, 
                                                    hidden_size=self.hidden_size,
                                                    f_out=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
-                                                   f_out_2=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
                                                   )
     def forward(self, x, edge_index, z):
         h = self.rnn_graph_conv(x, edge_index, z)
-        mus = x + h
+        mus = x + self.f_out(h)
         return mus
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
-    def __init__(self, device, node_features: int, seq_len: int, k: int, f_out, f_out_2, hidden_size: int, encoder: None, dynamic_graph: bool = False, aggr: str = 'add', bias: bool = True, **kwargs):
+    def __init__(self, device, node_features: int, seq_len: int, k: int, f_out, hidden_size: int, encoder: None, dynamic_graph: bool = False, aggr: str = 'add', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.device = device
         self.node_features = node_features
@@ -402,7 +402,6 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.k = k
         self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
         self.f_out = f_out
-        self.f_out_2 = f_out_2
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
         self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
@@ -435,8 +434,7 @@ class NRIDecoder_Recurrent(MessagePassing):
             else:
                 m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
             h = self.rnn(x, m)
-            x = self.f_out_2(h) # remove this
-        return x
+        return h
 
     def message(self, x_i, x_j, z):
         edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()

@@ -242,7 +242,7 @@ def train_model(epochs):
         val_kl_losses.append(epoch_val_kl_loss)
 
         ### Print to log file
-        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
@@ -257,7 +257,7 @@ def train_model(epochs):
             file=log)
         log.flush()
         ### Print to console
-        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
