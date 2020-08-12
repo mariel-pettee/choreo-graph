@@ -230,11 +230,21 @@ for g1,g2 in skeleton_lines:
 cloud_idxs = []
 for i in range(53):
     for j in range(53):
+        if i == j: continue # skip self-loops
         entry = []
         entry.append([i])
         entry.append([j])
         cloud_idxs.append(entry)
-
+        
+cloud_idxs_names = []
+for i in range(53):
+    for j in range(53):
+        if i == j: continue # skip self-loops
+        entry = []
+        entry.append([point_labels[i]])
+        entry.append([point_labels[j]])
+        cloud_idxs_names.append(entry)
+        
 all_idxs = skeleton_idxs+cloud_idxs
 
 # calculate the coordinates for the lines
@@ -247,7 +257,7 @@ def get_line_segments(seq, zcolor=None, cmap=None, cloud=False, edge_types=None,
         xline[:,edge,:,1] = np.mean(seq[:,joint2], axis=1)    
         if cmap:
             if edge_types is not None:
-                if edge > len(skeleton_idxs)-1: # cloud edges
+                if edge >= len(skeleton_idxs): # cloud edges
                     if edge_types[edge-len(skeleton_idxs), edge_class] == 1:
                         colors[edge] = cmap(1)
                     else:
@@ -260,7 +270,7 @@ def get_line_segments(seq, zcolor=None, cmap=None, cloud=False, edge_types=None,
         return xline
     
 # put line segments on the given axis, with given colors
-def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud=False, cloud_alpha=0.03, edge_types=None, edge_class=None):
+def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud=False, cloud_alpha=0.03, threshold=0, edge_types=None, edge_opacities=None, edge_class=None):
     lines = []
     ### Main skeleton
     for i in tqdm(range(len(skeleton_idxs)), desc="Skeleton lines"):
@@ -268,36 +278,53 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud
             c = color[i]
         else:
             c = color
+                        
+        if skeleton: alpha=0.3
+        else: alpha=0
             
-        if skeleton:
-            ### THESE LINES PLOT THE MAIN SKELETON
-            l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
-                    np.linspace(segments[i,1,0],segments[i,1,1],2),
-                    np.linspace(segments[i,2,0],segments[i,2,1],2),
-                    color=c,
-                    alpha=alpha,
-                    lw=lw)[0]
-            lines.append(l)
+        ### THESE LINES PLOT THE MAIN SKELETON
+        l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
+                np.linspace(segments[i,1,0],segments[i,1,1],2),
+                np.linspace(segments[i,2,0],segments[i,2,1],2),
+                color=c,
+                alpha=alpha,
+                lw=lw)[0]
+        lines.append(l)
     
     if cloud:
         ### Cloud of all-connected joints
-        for i in tqdm(range(len(skeleton_idxs),len(all_idxs)), desc="Cloud lines"):
+        for i in tqdm(range(len(cloud_idxs)), desc="Cloud lines"):
             if isinstance(color, (list,tuple,np.ndarray)):
                 c = color[i]
             else:
                 c = color
+                
             ### plot or don't plot lines based on edge class
             if edge_types is not None and edge_class is not None:
                 custom_colors = ["deeppink","black","red","blue","green","orange"]
-                if edge_types[i-len(skeleton_idxs)][edge_class] == 1:
-                    l = ax.plot(np.linspace(segments[i,0,0],segments[i,0,1],2),
-                            np.linspace(segments[i,1,0],segments[i,1,1],2),
-                            np.linspace(segments[i,2,0],segments[i,2,1],2),
-#                                 color=c,
-                            color=custom_colors[edge_class],
-                            alpha=cloud_alpha,
-                            lw=lw)[0]
+                if edge_types[i][edge_class] == 1:
+                    if edge_opacities is not None and edge_opacities[i,edge_class] > threshold: # and cloud_idxs[i][1] == [10]:
+                        alpha=edge_opacities[i,edge_class]
+                        print("Surviving edge: {} | ({} -> {}), i.e. ({} -> {})".format(i,cloud_idxs[i][0], cloud_idxs[i][1],cloud_idxs_names[i][0], cloud_idxs_names[i][1]))
+                    else:
+                        alpha=cloud_alpha
+                    l = ax.plot(
+                        np.linspace(segments[i,0,0],segments[i,0,1],2),
+                        np.linspace(segments[i,1,0],segments[i,1,1],2),
+                        np.linspace(segments[i,2,0],segments[i,2,1],2),
+                        color=custom_colors[edge_class],
+                        alpha=alpha,
+                        lw=lw)[0]
                     lines.append(l)
+                else:
+                    l = ax.plot(
+                        np.linspace(segments[i,0,0],segments[i,0,1],2),
+                        np.linspace(segments[i,1,0],segments[i,1,1],2),
+                        np.linspace(segments[i,2,0],segments[i,2,1],2),
+                        alpha=0,
+                        color="white",
+                        lw=lw)[0]
+                    lines.append(None)
     return lines
 
 # animate a video of the stick figure.
@@ -307,7 +334,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, cloud
 # by that amount.
 # `zcolor` may be an N-length array, where N is the number of vertices in seq, and will
 # be used to color the vertices. Typically this is set to the avg. z-value of each vtx.
-def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=None, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
+def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_opacities=None, threshold=0, edge_class=None, figsize=None, zcolor=None, pointer=None, ax_lims=(-0.4,0.4), speed=45,
                   dot_size=20, dot_alpha=0.5, lw=2.5, cmap='cool_r', pointer_color='black', cloud=False, cloud_alpha=0.03, skeleton=True):
     if zcolor is None:
         zcolor = np.zeros(seq.shape[1])
@@ -357,7 +384,7 @@ def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=No
         ax.set_zlim(0,ax_lims[1]-ax_lims[0])
     plt.close(fig)
     xline, colors = get_line_segments(seq, zcolor, cm, edge_types=edge_types, edge_class=edge_class)
-    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, cloud_alpha=cloud_alpha, edge_types=edge_types, edge_class=edge_class, skeleton=skeleton)
+    lines = put_lines(ax, xline[0], color=colors, lw=lw, alpha=0.9, cloud=cloud, cloud_alpha=cloud_alpha, edge_types=edge_types, edge_opacities=edge_opacities, threshold=threshold, edge_class=edge_class, skeleton=skeleton)
     
     if ghost is not None:
         xline_g = get_line_segments(ghost)
@@ -376,8 +403,9 @@ def animate_stick(seq, ghost=None, ghost_shift=0, edge_types=None, edge_class=No
     def update(t):
         pts._offsets3d = juggle_axes(seq[t,:,0], seq[t,:,1], seq[t,:,2], 'z')
         for i,l in enumerate(lines):
-            l.set_data(xline[t,i,:2])
-            l.set_3d_properties(xline[t,i,2])
+            if l is not None:
+                l.set_data(xline[t,i,:2])
+                l.set_3d_properties(xline[t,i,2])
         
         if ghost is not None:
             pts_g._offsets3d = juggle_axes(ghost[t,:,0], ghost[t,:,1], ghost[t,:,2], 'z')
