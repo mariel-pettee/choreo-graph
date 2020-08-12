@@ -35,7 +35,7 @@ parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embe
 parser.add_argument('--hidden_size', type=int, default=256, help='Number of timesteps per sequence.')
 parser.add_argument('--num_layers', type=int, default=1, help='Number of recurrent layers in decoder.')
 parser.add_argument('--pred_to_reco_ratio', type=float, default=1., help='How to weight prediction versus reconstruction losses during training.')
-parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
+parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict. Must be < seq_len.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
 parser.add_argument('--skip_connection', action='store_true', default=False, help='Enables skip connection in the encoder.')
@@ -114,6 +114,7 @@ model = NRI(device=device,
             node_embedding_dim=args.node_embedding_dim,
             edge_embedding_dim=args.edge_embedding_dim,
             seq_len=args.seq_len,
+            predicted_timesteps=args.predicted_timesteps,
             skip_connection=args.skip_connection,
             dynamic_graph=args.dynamic_graph,
            )

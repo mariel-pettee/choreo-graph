@@ -51,7 +51,7 @@ class VAE(torch.nn.Module):
     
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len):
+    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len, predicted_timesteps):
         super(NRI, self).__init__()
         self.device = device
         self.node_features = node_features
@@ -60,6 +60,7 @@ class NRI(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.hidden_size = hidden_size
         self.seq_len = seq_len
+        self.predicted_timesteps = predicted_timesteps
         self.skip_connection = skip_connection
         self.dynamic_graph = dynamic_graph
         self.encoder = NRIEncoder(
@@ -73,6 +74,7 @@ class NRI(torch.nn.Module):
         self.decoder = NRIDecoder(
             device=self.device,
             seq_len=self.seq_len,
+            predicted_timesteps=self.predicted_timesteps,
             node_features=self.node_features,
             dynamic_graph=self.dynamic_graph,
             encoder=self.encoder,
@@ -368,16 +370,17 @@ class NRIGraphConv(MessagePassing):
 
 class NRIDecoder(torch.nn.Module):
     """Decoder from graph to predicted positions"""
-    def __init__(self, device, node_features, hidden_size, seq_len, dynamic_graph, encoder, edge_embedding_dim):
+    def __init__(self, device, node_features, hidden_size, seq_len, predicted_timesteps, dynamic_graph, encoder, edge_embedding_dim):
         super(NRIDecoder, self).__init__()
         self.device = device
         self.node_features = node_features
         self.hidden_size = hidden_size
         self.seq_len = seq_len
+        self.predicted_timesteps = predicted_timesteps
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.f_out = Sequential(Linear(self.hidden_size, self.node_features), ReLU())
+        self.f_out = Sequential(Linear(self.hidden_size, int(self.node_features/6)), ReLU())
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -388,8 +391,29 @@ class NRIDecoder(torch.nn.Module):
                                                    f_out=Sequential(Linear(self.hidden_size, self.node_features), ReLU()),
                                                   )
     def forward(self, x, edge_index, z):
-        h = self.rnn_graph_conv(x, edge_index, z)
-        mus = x + self.f_out(h)
+        h = torch.zeros(x.size(0),self.hidden_size) # initialize hidden state
+        predictions = []
+        
+        ### Reshape x to iterate over timesteps more explicitly
+        # previous size of x: [batch_size * n_joints, seq_len*6]
+        # new size of x: [batch_size * n_joints, seq_len, 6] (6 is from x,y,z and v_x, v_y, v_z)
+        x_flat_shape = x.size()
+        x = torch.reshape(x, [x.size(0),self.seq_len,6])
+        
+        ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
+        for timestep in range(self.seq_len):
+            if timestep < (self.seq_len - self.predicted_timesteps):
+                inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
+            else:
+                inputs = predictions[timestep-1] # feed in previous prediction
+            h = self.rnn_graph_conv(inputs, edge_index, z, h)
+            
+            ### Final MLP to convert hidden dimension back into node_features
+            mu = inputs + self.f_out(h)
+            predictions.append(mu)
+
+        mus = torch.stack(predictions, dim=1)
+        mus = torch.reshape(mus, x_flat_shape)
         return mus
     
 class NRIDecoder_Recurrent(MessagePassing):
@@ -399,8 +423,9 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.device = device
         self.node_features = node_features
         self.seq_len = seq_len
+        self.hidden_size = hidden_size
         self.k = k
-        self.rnn = torch.nn.GRUCell(node_features, hidden_size, bias=bias)
+        self.rnn = torch.nn.GRUCell(6, hidden_size, bias=bias)
         self.f_out = f_out
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
@@ -410,30 +435,22 @@ class NRIDecoder_Recurrent(MessagePassing):
     def reset_parameters(self):
         self.rnn.reset_parameters()
 
-    def forward(self, x, edge_index, z):
-        if x.size(-1) > self.node_features:
-            raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
+    def forward(self, x, edge_index, z, h):
+#         if x.size(-1) > self.node_features:
+#             raise ValueError('The number of input channels is not allowed to be larger than the number of output channels')
         
-        if x.size(-1) < self.node_features:
-            zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
-            x = torch.cat([x, zero], dim=1)
-                    
-        h = torch.zeros(x.size()) # size: [batch_size * n_joints, seq_len*6]
-        # need to change x to size: [batch_size * n_joints, seq_len, 6]
-        # use squeeze if you get any complaints
-        # index x by timestep
-        for timestep in range(2):
-            if self.dynamic_graph: 
-                ### Resample to get a new z at each timestep 
-                batch = Data(x=x, edge_index=edge_index)
-                edge_embedding = self.encoder(batch)
-                z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
-            if torch.cuda.is_available() and self.device != 'cpu': h = h.cuda()
-            if h.size() == x.size():
-                m = self.propagate(x=h, edge_index=edge_index, z=z, size=None)
-            else:
-                m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
-            h = self.rnn(x, m)
+#         if x.size(-1) < self.node_features:
+#             zero = x.new_zeros(x.size(0), self.node_features - x.size(-1))
+#             x = torch.cat([x, zero], dim=1)
+        
+        if self.dynamic_graph: 
+            ### Resample to get a new z at each timestep 
+            batch = Data(x=x, edge_index=edge_index)
+            edge_embedding = self.encoder(batch)
+            z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
+        if torch.cuda.is_available() and self.device != 'cpu': h = h.cuda()
+        m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
+        h = self.rnn(x, m)
         return h
 
     def message(self, x_i, x_j, z):
