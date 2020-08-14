@@ -398,10 +398,10 @@ class NRIDecoder(torch.nn.Module):
         # previous size of x: [batch_size * n_joints, seq_len*6]
         # new size of x: [batch_size * n_joints, seq_len, 6] (6 is from x,y,z and v_x, v_y, v_z)
         x_flat_shape = x.size()
-        x = torch.reshape(x, [x.size(0),self.seq_len,6])
+        x = torch.reshape(x, [x.size(0),int(x.size(1)/6),6])
         
         ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
-        for timestep in range(self.seq_len):
+        for timestep in range(int(x.size(1)/6)):
             if timestep < (self.seq_len - self.predicted_timesteps):
                 inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
             else:
