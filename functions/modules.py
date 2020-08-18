@@ -418,7 +418,7 @@ class NRIDecoder(torch.nn.Module):
     
 class NRIDecoder_Recurrent(MessagePassing):
     """Adapted from GatedGraphConv layer."""
-    def __init__(self, device, node_features: int, seq_len: int, k: int, f_out, hidden_size: int, encoder: None, dynamic_graph: bool = False, aggr: str = 'add', bias: bool = True, **kwargs):
+    def __init__(self, device, node_features: int, seq_len: int, k: int, f_out, hidden_size: int, encoder: None, dynamic_graph: bool = False, aggr: str = 'mean', bias: bool = True, **kwargs):
         super(NRIDecoder_Recurrent, self).__init__(aggr=aggr, **kwargs)
         self.device = device
         self.node_features = node_features
