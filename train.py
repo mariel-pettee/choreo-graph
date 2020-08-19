@@ -35,7 +35,7 @@ parser.add_argument('--edge_embedding_dim', type=int, default=4, help='Edge embe
 parser.add_argument('--hidden_size', type=int, default=256, help='Number of timesteps per sequence.')
 parser.add_argument('--num_layers', type=int, default=1, help='Number of recurrent layers in decoder.')
 parser.add_argument('--pred_to_reco_ratio', type=float, default=1., help='How to weight prediction versus reconstruction losses during training.')
-parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict.')
+parser.add_argument('--predicted_timesteps', type=int, default=10, help='Number of timesteps to predict. Must be < seq_len.')
 parser.add_argument('--batch_limit', type=int, default=0, help='Number of batches per epoch -- if 0, will run over all batches.')
 parser.add_argument('--reduced_joints', action='store_true', default=False, help='Trains on 18 joints rather than all 53.')
 parser.add_argument('--skip_connection', action='store_true', default=False, help='Enables skip connection in the encoder.')
@@ -114,6 +114,7 @@ model = NRI(device=device,
             node_embedding_dim=args.node_embedding_dim,
             edge_embedding_dim=args.edge_embedding_dim,
             seq_len=args.seq_len,
+            predicted_timesteps=args.predicted_timesteps,
             skip_connection=args.skip_connection,
             dynamic_graph=args.dynamic_graph,
            )
@@ -136,9 +137,9 @@ if os.path.isfile(checkpoint_path):
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
-    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint), file=log)
+    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint), file=log)
     log.flush()
-    print("Loading saved checkpoint from {} (best loss so far: {:.6f})...".format(checkpoint_path, loss_checkpoint))
+    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint))
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
@@ -242,7 +243,7 @@ def train_model(epochs):
         val_kl_losses.append(epoch_val_kl_loss)
 
         ### Print to log file
-        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
@@ -257,7 +258,7 @@ def train_model(epochs):
             file=log)
         log.flush()
         ### Print to console
-        print("epoch : {}/{} | train_loss = {:,.6f} | train_mse_loss: {:,.6f} | train_nll_loss: {:,.6f} | train_kl_loss = {:,.6f} | val_loss = {:,.6f} | val_mse_loss: {:,.6f} | val_nll_loss: {:,.6f} | val_kl_loss: {:,.6f} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,

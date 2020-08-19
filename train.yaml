@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: nri-gpu-skip-seq49-
+  generateName: aggrmean-seq10-pred2-
   labels:
     type: interactive
     research-group: rl-team
@@ -11,14 +11,15 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=nri_gpu_skip_seq49",
+    "--name=aggrmean_seq10_pred2",
     "--epochs=20",
-    "--batch_size=12",
+    "--batch_size=1",
+#     "--batch_limit=10",
 #     "--hidden_size=256",
-    "--node_embedding_dim=36",
-#     "--predicted_timesteps=10",
+    "--node_embedding_dim=60", # or 6*seq_len for small seq_len
 #     "--edge_embedding_dim=2", # this is k, i.e. number of edge types
-    "--seq_len=49",
+    "--seq_len=10",
+    "--predicted_timesteps=2", # make sure this is less than seq_len
 #     "--skip_connection",
     ]
     # command: ["sleep", "infinity"]
@@ -27,8 +28,8 @@ spec:
     resources:
       limits:
         nvidia.com/gpu: 1
-        cpu: 11
-        memory: 30Gi
+        cpu: 4
+        memory: 50Gi
     volumeMounts:
     - mountPath: "/workspace"
       name: workspace 
