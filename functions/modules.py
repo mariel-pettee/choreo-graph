@@ -398,18 +398,24 @@ class NRIDecoder(torch.nn.Module):
         # previous size of x: [batch_size * n_joints, seq_len*6]
         # new size of x: [batch_size * n_joints, seq_len, 6] (6 is from x,y,z and v_x, v_y, v_z)
         x_flat_shape = x.size()
-        x = torch.reshape(x, [x.size(0),self.seq_len,6])
+        n_timesteps = int(x.size(1)/6)
+        x = torch.reshape(x, [x.size(0),n_timesteps,6])
         
         ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
-        for timestep in range(self.seq_len):
+        for timestep in range(n_timesteps):
+            print(timestep)
             if timestep < (self.seq_len - self.predicted_timesteps):
+                print("inputs")
                 inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
             else:
+                print("predictions")
                 inputs = predictions[timestep-1] # feed in previous prediction
             h = self.rnn_graph_conv(inputs, edge_index, z, h)
             
             ### Final MLP to convert hidden dimension back into node_features
             mu = inputs + self.f_out(h)
+            print("hidden:", h)
+            print("f_out(h):", self.f_out(h))
             predictions.append(mu)
 
         mus = torch.stack(predictions, dim=1)
