@@ -86,7 +86,7 @@ class NRI(torch.nn.Module):
         edge_embedding = self.encoder(batch)
         z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5, hard=True)
         output = self.decoder(batch.x, batch.edge_index, z)
-        return output, z, F.softmax(edge_embedding, dim=-1)
+        return output, z, edge_embedding, F.softmax(edge_embedding, dim=-1)
     
 ### VAE MODULES 
 
