@@ -174,7 +174,7 @@ def train_model(epochs):
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
-            output, probabilities = model(batch)
+            output, edge_types, logits, probabilities = model(batch)
 
             ### CALCULATE LOSS
             train_mse_loss = mse_loss(output, batch.x.to(device)) # just calculate this for comparison; it's not added to the loss
@@ -203,7 +203,7 @@ def train_model(epochs):
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
-            output, probabilities = model(batch)
+            output, edge_types, probabilities = model(batch)
             
             ### CALCULATE LOSS
             val_mse_loss = mse_loss(output, batch.x.to(device)) # just for comparison

@@ -83,18 +83,10 @@ class NRI(torch.nn.Module):
         )
 
     def forward(self, batch):
-        t_0 = time.time()
         edge_embedding = self.encoder(batch)
-        t_enc = time.time()
-        z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5)
-        t_samp = time.time()
+        z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5, hard=True)
         output = self.decoder(batch.x, batch.edge_index, z)
-        t_dec = time.time()
-        t_tot = t_dec - t_0
-#         print("Encoder: {:.4f} sec ({:.2f}% of total)".format(t_enc-t_0, 100*(t_enc-t_0)/t_tot))
-#         print("Sampling: {:.4f} sec ({:.2f}% of total)".format(t_samp-t_enc, 100*(t_samp-t_enc)/t_tot))
-#         print("Decoder: {:.4f} sec ({:.2f}% of total)".format(t_dec-t_samp, 100*(t_dec-t_samp)/t_tot))
-        return output, F.softmax(edge_embedding, dim=-1)
+        return output, z, edge_embedding, F.softmax(edge_embedding, dim=-1)
     
 ### VAE MODULES 
 
@@ -403,19 +395,19 @@ class NRIDecoder(torch.nn.Module):
         
         ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
         for timestep in range(n_timesteps):
-            print(timestep)
+#             print(timestep)
             if timestep < (self.seq_len - self.predicted_timesteps):
-                print("inputs")
+#                 print("inputs")
                 inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
             else:
-                print("predictions")
+#                 print("predictions")
                 inputs = predictions[timestep-1] # feed in previous prediction
             h = self.rnn_graph_conv(inputs, edge_index, z, h)
             
             ### Final MLP to convert hidden dimension back into node_features
             mu = inputs + self.f_out(h)
-            print("hidden:", h)
-            print("f_out(h):", self.f_out(h))
+#             print("hidden:", h)
+#             print("f_out(h):", self.f_out(h))
             predictions.append(mu)
 
         mus = torch.stack(predictions, dim=1)
