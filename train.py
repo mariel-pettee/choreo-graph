@@ -89,23 +89,14 @@ if args.no_cuda:
     device = 'cpu'
 else:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    
+print("\nUsing {}".format(device))
 print("\nUsing {}".format(device), file=log)
 
 ### DEFINE MODEL 
 node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
 checkpoint_loaded = False 
-
-# model = VAE(node_features=node_features, 
-#             edge_features=edge_features, 
-#             hidden_size=hidden_size, 
-#             node_embedding_dim=node_embedding_dim,
-#             edge_embedding_dim=edge_embedding_dim,
-#             num_layers=num_layers,
-#             input_size=node_embedding_dim, 
-#             output_size=node_features+args.predicted_timesteps*data.n_dim,
-#            )
 
 model = NRI(device=device,
             node_features=node_features, 
@@ -125,8 +116,8 @@ optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=
 model = model.to(device)
 print(model, file=log)
 print(model)
-print("Total trainable parameters: {:,.5f}".format(count_parameters(model)))
-print("Total trainable parameters: {:,.5f}".format(count_parameters(model)), file=log)
+print("Total trainable parameters: {:,}".format(count_parameters(model)))
+print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
 
 ### LOAD PRE-TRAINED WEIGHTS

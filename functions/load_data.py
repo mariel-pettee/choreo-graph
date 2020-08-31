@@ -4,6 +4,74 @@ import numpy as np
 from glob import glob
 import os
 
+### PS: See http://www.cs.uu.nl/docs/vakken/mcanim/mocap-manual/site/img/markers.png for detailed marker definitions
+point_labels = ['ARIEL','C7','CLAV','LANK','LBHD','LBSH','LBWT','LELB','LFHD','LFRM','LFSH','LFWT','LHEL','LIEL','LIHAND','LIWR','LKNE','LKNI','LMT1','LMT5','LOHAND','LOWR','LSHN','LTHI','LTOE','LUPA','MBWT','MFWT','RANK','RBHD','RBSH','RBWT','RELB','RFHD','RFRM','RFSH','RFWT','RHEL','RIEL','RIHAND','RIWR','RKNE','RKNI','RMT1','RMT5','ROHAND','ROWR','RSHN','RTHI','RTOE','RUPA','STRN','T10']
+
+reduced_joint_names = ['ARIEL','CLAV','RFSH','LFSH','RIEL','LIEL','RIWR','LIWR','RKNE','LKNE','RTOE','LTOE','LHEL','RHEL','RFWT','LFWT','LBWT','RBWT']
+
+skeleton_lines = [
+#     ( (start group), (end group) ),
+    (('LHEL',), ('LTOE',)), # toe to heel
+    (('RHEL',), ('RTOE',)),
+    (('LMT1',), ('LMT5',)), # horizontal line across foot
+    (('RMT1',), ('RMT5',)),   
+    (('LHEL',), ('LMT1',)), # heel to sides of feet
+    (('LHEL',), ('LMT5',)),
+    (('RHEL',), ('RMT1',)),
+    (('RHEL',), ('RMT5',)),
+    (('LTOE',), ('LMT1',)), # toe to sides of feet
+    (('LTOE',), ('LMT5',)),
+    (('RTOE',), ('RMT1',)),
+    (('RTOE',), ('RMT5',)),
+    (('LKNE',), ('LHEL',)), # heel to knee
+    (('RKNE',), ('RHEL',)),
+    (('LFWT',), ('RBWT',)), # connect pelvis
+    (('RFWT',), ('LBWT',)), 
+    (('LFWT',), ('RFWT',)), 
+    (('LBWT',), ('RBWT',)),
+    (('LFWT',), ('LBWT',)), 
+    (('RFWT',), ('RBWT',)), 
+    (('LFWT',), ('LTHI',)), # pelvis to thighs
+    (('RFWT',), ('RTHI',)), 
+    (('LBWT',), ('LTHI',)), 
+    (('RBWT',), ('RTHI',)), 
+    (('LKNE',), ('LTHI',)), 
+    (('RKNE',), ('RTHI',)), 
+    (('CLAV',), ('LFSH',)), # clavicle to shoulders
+    (('CLAV',), ('RFSH',)), 
+    (('STRN',), ('LFSH',)), # sternum & T10 (back sternum) to shoulders
+    (('STRN',), ('RFSH',)), 
+    (('T10',), ('LFSH',)), 
+    (('T10',), ('RFSH',)), 
+    (('C7',), ('LBSH',)), # back clavicle to back shoulders
+    (('C7',), ('RBSH',)), 
+    (('LFSH',), ('LBSH',)), # front shoulders to back shoulders
+    (('RFSH',), ('RBSH',)), 
+    (('LFSH',), ('RBSH',)),
+    (('RFSH',), ('LBSH',)),
+    (('LFSH',), ('LUPA',),), # shoulders to upper arms
+    (('RFSH',), ('RUPA',),), 
+    (('LBSH',), ('LUPA',),), 
+    (('RBSH',), ('RUPA',),), 
+    (('LIWR',), ('LIHAND',),), # wrist to hand
+    (('RIWR',), ('RIHAND',),),
+    (('LOWR',), ('LOHAND',),), 
+    (('ROWR',), ('ROHAND',),),
+    (('LIWR',), ('LOWR',),), # across the wrist 
+    (('RIWR',), ('ROWR',),), 
+    (('LIHAND',), ('LOHAND',),), # across the palm 
+    (('RIHAND',), ('ROHAND',),), 
+    (('LFHD',), ('LBHD',)), # draw lines around circumference of the head
+    (('LBHD',), ('RBHD',)),
+    (('RBHD',), ('RFHD',)),
+    (('RFHD',), ('LFHD',)),
+    (('LFHD',), ('ARIEL',)), # connect circumference points to top of head
+    (('LBHD',), ('ARIEL',)),
+    (('RBHD',), ('ARIEL',)),
+    (('RFHD',), ('ARIEL',)),
+]
+
+
 class MarielDataset(torch.utils.data.Dataset):
     'Characterizes a dataset for PyTorch'
     def __init__(self, reduced_joints=False, xy_centering=True, seq_len=128, predicted_timesteps=1, file_path="data/mariel_*.npy", no_overlap=False):
@@ -139,89 +207,13 @@ def load_data(pattern="data/mariel_*.npy"):
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 def edges(reduced_joints, seq_len):
-    ### PS: See http://www.cs.uu.nl/docs/vakken/mcanim/mocap-manual/site/img/markers.png for detailed marker definitions
-    point_labels=['ARIEL','C7','CLAV','LANK','LBHD','LBSH','LBWT','LELB','LFHD',
-              'LFRM','LFSH','LFWT','LHEL','LIEL','LIHAND','LIWR','LKNE','LKNI',
-              'LMT1','LMT5','LOHAND','LOWR','LSHN','LTHI','LTOE','LUPA','MBWT',
-              'MFWT','RANK','RBHD','RBSH','RBWT','RELB','RFHD','RFRM','RFSH',
-              'RFWT','RHEL','RIEL','RIHAND','RIWR','RKNE','RKNI','RMT1','RMT5',
-              'ROHAND','ROWR','RSHN','RTHI','RTOE','RUPA','STRN','T10']
-
     ### Define a subset of joints if we want to train on fewer joints that still capture meaningful body movement:
-    reduced_joint_names = ['ARIEL', 'CLAV', 'RFSH', 'LFSH', 'RIEL', 'LIEL', 'RIWR', 'LIWR','RKNE','LKNE','RTOE','LTOE','LHEL','RHEL','RFWT','LFWT','LBWT','RBWT']
-    reduced_joint_indices = [point_labels.index(joint_name) for joint_name in reduced_joint_names]
-
-    all_edges = [(i,j) for i in range(53) for j in range(53)]
-    all_edges_reversed = [(i,j) for i in range(53) for j in range(53)]
-    
     if reduced_joints == True:
-        reduced_edges = [(i,j) for i in reduced_joint_indices for j in reduced_joint_indices]
-        reduced_edges_reversed = [(j,i) for i in reduced_joint_indices for j in reduced_joint_indices]
-        edge_index = np.row_stack([reduced_edges,reduced_edges_reversed])
+        reduced_joint_indices = [point_labels.index(joint_name) for joint_name in reduced_joint_names]
+        edge_index = np.array([(i,j) for i in reduced_joint_indices for j in reduced_joint_indices if i!=j])
     else:
-        edge_index = np.row_stack([all_edges,all_edges_reversed])
-
-    skeleton_lines = [
-    #     ( (start group), (end group) ),
-        (('LHEL',), ('LTOE',)), # toe to heel
-        (('RHEL',), ('RTOE',)),
-        (('LMT1',), ('LMT5',)), # horizontal line across foot
-        (('RMT1',), ('RMT5',)),   
-        (('LHEL',), ('LMT1',)), # heel to sides of feet
-        (('LHEL',), ('LMT5',)),
-        (('RHEL',), ('RMT1',)),
-        (('RHEL',), ('RMT5',)),
-        (('LTOE',), ('LMT1',)), # toe to sides of feet
-        (('LTOE',), ('LMT5',)),
-        (('RTOE',), ('RMT1',)),
-        (('RTOE',), ('RMT5',)),
-        (('LKNE',), ('LHEL',)), # heel to knee
-        (('RKNE',), ('RHEL',)),
-        (('LFWT',), ('RBWT',)), # connect pelvis
-        (('RFWT',), ('LBWT',)), 
-        (('LFWT',), ('RFWT',)), 
-        (('LBWT',), ('RBWT',)),
-        (('LFWT',), ('LBWT',)), 
-        (('RFWT',), ('RBWT',)), 
-        (('LFWT',), ('LTHI',)), # pelvis to thighs
-        (('RFWT',), ('RTHI',)), 
-        (('LBWT',), ('LTHI',)), 
-        (('RBWT',), ('RTHI',)), 
-        (('LKNE',), ('LTHI',)), 
-        (('RKNE',), ('RTHI',)), 
-        (('CLAV',), ('LFSH',)), # clavicle to shoulders
-        (('CLAV',), ('RFSH',)), 
-        (('STRN',), ('LFSH',)), # sternum & T10 (back sternum) to shoulders
-        (('STRN',), ('RFSH',)), 
-        (('T10',), ('LFSH',)), 
-        (('T10',), ('RFSH',)), 
-        (('C7',), ('LBSH',)), # back clavicle to back shoulders
-        (('C7',), ('RBSH',)), 
-        (('LFSH',), ('LBSH',)), # front shoulders to back shoulders
-        (('RFSH',), ('RBSH',)), 
-        (('LFSH',), ('RBSH',)),
-        (('RFSH',), ('LBSH',)),
-        (('LFSH',), ('LUPA',),), # shoulders to upper arms
-        (('RFSH',), ('RUPA',),), 
-        (('LBSH',), ('LUPA',),), 
-        (('RBSH',), ('RUPA',),), 
-        (('LIWR',), ('LIHAND',),), # wrist to hand
-        (('RIWR',), ('RIHAND',),),
-        (('LOWR',), ('LOHAND',),), 
-        (('ROWR',), ('ROHAND',),),
-        (('LIWR',), ('LOWR',),), # across the wrist 
-        (('RIWR',), ('ROWR',),), 
-        (('LIHAND',), ('LOHAND',),), # across the palm 
-        (('RIHAND',), ('ROHAND',),), 
-        (('LFHD',), ('LBHD',)), # draw lines around circumference of the head
-        (('LBHD',), ('RBHD',)),
-        (('RBHD',), ('RFHD',)),
-        (('RFHD',), ('LFHD',)),
-        (('LFHD',), ('ARIEL',)), # connect circumference points to top of head
-        (('LBHD',), ('ARIEL',)),
-        (('RBHD',), ('ARIEL',)),
-        (('RFHD',), ('ARIEL',)),
-    ]
+        reduced_joint_indices = None
+        edge_index = np.array([(i,j) for i in range(53) for j in range(53) if i!=j]) # note: no self-loops!
 
     skeleton_idxs = []
     for g1,g2 in skeleton_lines:
@@ -243,8 +235,6 @@ def edges(reduced_joints, seq_len):
     
     if reduced_joints == True: 
         ### Need to remake these lists to include only nodes 0-18 now
-        reduced_edges = [(i,j) for i in np.arange(len(reduced_joint_indices)) for j in np.arange(len(reduced_joint_indices))]
-        reduced_edges_reversed = [(j,i) for i in np.arange(len(reduced_joint_indices)) for j in np.arange(len(reduced_joint_indices))]
-        edge_index = np.row_stack([reduced_edges,reduced_edges_reversed])
+        edge_index = np.array([(i,j) for i in np.arange(len(reduced_joint_indices)) for j in np.arange(len(reduced_joint_indices)) if i!=j])
     
     return torch.tensor(edge_index, dtype=torch.long), skeleton_edges_over_time, reduced_joint_indices
