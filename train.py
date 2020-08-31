@@ -81,9 +81,9 @@ torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
 torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
 torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
 
-print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
+print("\nGenerated {:,.5f} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
 log.flush()
-print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]))
+print("\nGenerated {:,.5f} training batches of shape: {}".format(len(dataloader_train), data[0]))
 
 if args.no_cuda:
     device = 'cpu'
@@ -125,8 +125,8 @@ optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=
 model = model.to(device)
 print(model, file=log)
 print(model)
-print("Total trainable parameters: {:,}".format(count_parameters(model)))
-print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
+print("Total trainable parameters: {:,.5f}".format(count_parameters(model)))
+print("Total trainable parameters: {:,.5f}".format(count_parameters(model)), file=log)
 log.flush()
 
 ### LOAD PRE-TRAINED WEIGHTS
@@ -137,9 +137,9 @@ if os.path.isfile(checkpoint_path):
     epoch = checkpoint['epoch']
     loss_checkpoint = checkpoint['loss']
     checkpoint_loaded = True
-    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint), file=log)
+    print("Loading saved checkpoint from {} (best loss so far: {:.5f})...".format(checkpoint_path, loss_checkpoint), file=log)
     log.flush()
-    print("Loading saved checkpoint from {} (best loss so far: {})...".format(checkpoint_path, loss_checkpoint))
+    print("Loading saved checkpoint from {} (best loss so far: {:.5f})...".format(checkpoint_path, loss_checkpoint))
 
 ### TRAIN
 mse_loss = torch.nn.MSELoss(reduction='mean')
@@ -203,7 +203,7 @@ def train_model(epochs):
             batch = batch.to(device)
             
             ### CALCULATE MODEL OUTPUTS
-            output, edge_types, probabilities = model(batch)
+            output, edge_types, logits, probabilities = model(batch)
             
             ### CALCULATE LOSS
             val_mse_loss = mse_loss(output, batch.x.to(device)) # just for comparison
@@ -243,7 +243,7 @@ def train_model(epochs):
         val_kl_losses.append(epoch_val_kl_loss)
 
         ### Print to log file
-        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,.5f} | train_mse_loss: {:,.5f} | train_nll_loss: {:,.5f} | train_kl_loss = {:,.5f} | val_loss = {:,.5f} | val_mse_loss: {:,.5f} | val_nll_loss: {:,.5f} | val_kl_loss: {:,.5f} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
@@ -258,7 +258,7 @@ def train_model(epochs):
             file=log)
         log.flush()
         ### Print to console
-        print("epoch : {}/{} | train_loss = {:,} | train_mse_loss: {:,} | train_nll_loss: {:,} | train_kl_loss = {:,} | val_loss = {:,} | val_mse_loss: {:,} | val_nll_loss: {:,} | val_kl_loss: {:,} | time: {:.1f} sec".format(
+        print("epoch : {}/{} | train_loss = {:,.5f} | train_mse_loss: {:,.5f} | train_nll_loss: {:,.5f} | train_kl_loss = {:,.5f} | val_loss = {:,.5f} | val_mse_loss: {:,.5f} | val_nll_loss: {:,.5f} | val_kl_loss: {:,.5f} | time: {:.1f} sec".format(
             epoch+1, 
             epochs, 
             epoch_train_loss,
