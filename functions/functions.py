@@ -31,6 +31,10 @@ def nll_gaussian(preds, target, variance=5e-5, add_const=False):
         neg_log_p += const
     return neg_log_p.sum() / (target.size(0) * target.size(1))
 
+def kl_categorical(preds, log_prior, num_atoms, eps=1e-16):
+    kl_div = preds * (torch.log(preds + eps) - log_prior)
+    return kl_div.sum() / (num_atoms * preds.size(0))
+
 def kl_categorical_uniform(preds, num_atoms, num_edge_types, add_const=False, eps=1e-16):
     kl_div = preds * torch.log(preds + eps) # Shannon entropy -- n log n
     if add_const:

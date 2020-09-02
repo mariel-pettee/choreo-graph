@@ -42,6 +42,7 @@ parser.add_argument('--skip_connection', action='store_true', default=False, hel
 parser.add_argument('--dynamic_graph',action='store_true', default=False, help='Enables dynamic graph re-computation per timestep during testing.')
 parser.add_argument('--no_overlap', action='store_true', default=False, help="Don't train on overlapping sequences.")
 parser.add_argument('--no_cuda', action='store_true', default=False, help="Don't use GPU, even if available.")
+parser.add_argument('--sparsity_prior', action='store_true', default=False, help="Enables sparsity prior when training.")
 parser.add_argument('--shuffle', action='store_true', default=False, help="Enables shuffling samples in the DataLoader.")
 args = parser.parse_args()
 print(args)
@@ -81,9 +82,9 @@ torch.save(dataloader_train, os.path.join(save_folder, 'dataloader_train.pth'))
 torch.save(dataloader_val, os.path.join(save_folder, 'dataloader_val.pth'))
 torch.save(dataloader_test, os.path.join(save_folder, 'dataloader_test.pth'))
 
-print("\nGenerated {:,.5f} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
+print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]), file=log)
 log.flush()
-print("\nGenerated {:,.5f} training batches of shape: {}".format(len(dataloader_train), data[0]))
+print("\nGenerated {:,} training batches of shape: {}".format(len(dataloader_train), data[0]))
 
 if args.no_cuda:
     device = 'cpu'
@@ -110,7 +111,6 @@ model = NRI(device=device,
             dynamic_graph=args.dynamic_graph,
            )
 
-
 optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=5e-4)
 
 model = model.to(device)
@@ -119,6 +119,16 @@ print(model)
 print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
+
+if args.sparsity_prior:
+    prior_array = []
+    prior_array.append(0.9) # 90% of edges as non-edge
+    for k in range(1,args.edge_embedding_dim):
+        prior_array.append(0.1/(args.edge_embedding_dim-1))
+    prior = np.array(prior_array)
+    print("Using sparsity prior: {}".format(prior))
+    log_prior = torch.FloatTensor(np.log(prior))
+    if torch.cuda.is_available() and device != 'cpu': log_prior = log_prior.cuda()
 
 ### LOAD PRE-TRAINED WEIGHTS
 if os.path.isfile(checkpoint_path):
@@ -170,7 +180,10 @@ def train_model(epochs):
             ### CALCULATE LOSS
             train_mse_loss = mse_loss(output, batch.x.to(device)) # just calculate this for comparison; it's not added to the loss
             train_nll_loss = nll_gaussian(output, batch.x.to(device))
-            train_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
+            if args.sparsity_prior:
+                train_kl_loss = kl_categorical(probabilities, log_prior, 53)
+            else:
+                train_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
             train_loss = train_nll_loss + train_kl_loss
 
             ### ADD LOSSES TO TOTALS
@@ -199,6 +212,10 @@ def train_model(epochs):
             ### CALCULATE LOSS
             val_mse_loss = mse_loss(output, batch.x.to(device)) # just for comparison
             val_nll_loss = nll_gaussian(output, batch.x.to(device))
+            if args.sparsity_prior:
+                val_kl_loss = kl_categorical(probabilities, log_prior, 53)
+            else:
+                val_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
             val_kl_loss = kl_categorical_uniform(probabilities, 53, args.edge_embedding_dim)
             val_loss = val_nll_loss # note: don't add KL loss
 

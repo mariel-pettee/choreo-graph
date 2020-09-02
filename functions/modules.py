@@ -202,12 +202,9 @@ class NRIDecoder(torch.nn.Module):
         
         ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
         for timestep in range(n_timesteps):
-#             print(timestep)
             if timestep < (self.seq_len - self.predicted_timesteps):
-#                 print("inputs")
                 inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
             else:
-#                 print("predictions")
                 inputs = predictions[timestep-1] # feed in previous prediction
             h = self.rnn_graph_conv(inputs, edge_index, z, h)
             
@@ -234,7 +231,7 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.f_out = f_out
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
+        self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k-1)] # leave out one for the non-edge
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -250,13 +247,14 @@ class NRIDecoder_Recurrent(MessagePassing):
         m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
         h = self.rnn(x, m)
         return h
-
+    
     def message(self, x_i, x_j, z):
         edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
         if torch.cuda.is_available() and self.device != 'cpu':
-            k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+            # Note: use i+1 to skip the first edge type
+            k_list = [z[:,i+1].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         else:
-            k_list = [z[:,i].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+            k_list = [z[:,i+1].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         stack = torch.stack(k_list, dim=1)
         output = stack.sum(dim=1) # sum over k
         return output
