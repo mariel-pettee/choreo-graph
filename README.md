@@ -6,6 +6,8 @@
 - numpy
 - tqdm
 - jupyter
+- matplotlib
+- ffmpeg (recommended for making animations)
 
 ## Usage
 Example training command to test your setup:
