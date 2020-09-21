@@ -99,6 +99,16 @@ node_features = data.seq_len*data.n_dim
 edge_features = data[0].num_edge_features
 checkpoint_loaded = False 
 
+encoder = NRIEncoder(
+            node_features=node_features, 
+            edge_features=edge_features, 
+            hidden_size=args.hidden_size, 
+            skip_connection=args.skip_connection,
+            node_embedding_dim=args.node_embedding_dim,
+            edge_embedding_dim=args.edge_embedding_dim,
+        )
+
+
 model = NRI(device=device,
             node_features=node_features, 
             edge_features=edge_features, 
@@ -116,6 +126,8 @@ optimizer = torch.optim.Adam(list(model.parameters()), lr=args.lr, weight_decay=
 model = model.to(device)
 print(model, file=log)
 print(model)
+print("Encoder trainable parameters: {:,}".format(count_parameters(encoder)))
+print("Encoder trainable parameters: {:,}".format(count_parameters(encoder)), file=log)
 print("Total trainable parameters: {:,}".format(count_parameters(model)))
 print("Total trainable parameters: {:,}".format(count_parameters(model)), file=log)
 log.flush()
@@ -173,6 +185,7 @@ def train_model(epochs):
         ### TRAINING LOOP
         for batch in tqdm(dataloader_train, desc="Train"):
             batch = batch.to(device)
+            print("Batch is size {} -- first 10 timesteps for joint 0_x: {}".format(batch.x.size(), batch.x[0,:10]))
             
             ### CALCULATE MODEL OUTPUTS
             output, edge_types, logits, probabilities = model(batch)
