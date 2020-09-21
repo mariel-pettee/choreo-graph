@@ -108,7 +108,6 @@ encoder = NRIEncoder(
             edge_embedding_dim=args.edge_embedding_dim,
         )
 
-
 model = NRI(device=device,
             node_features=node_features, 
             edge_features=edge_features, 
@@ -185,7 +184,7 @@ def train_model(epochs):
         ### TRAINING LOOP
         for batch in tqdm(dataloader_train, desc="Train"):
             batch = batch.to(device)
-            print("Batch is size {} -- first 10 timesteps for joint 0_x: {}".format(batch.x.size(), batch.x[0,:10]))
+            print("Batch is size {} -- timesteps for joint 0_x: {}".format(batch.x.size(), batch.x[0,:30:6]))
             
             ### CALCULATE MODEL OUTPUTS
             output, edge_types, logits, probabilities = model(batch)
@@ -212,7 +211,8 @@ def train_model(epochs):
 
             ### OPTIONAL -- STOP TRAINING EARLY
             n_batches += 1
-            if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # for shorter iterations during testing
+            break
+#             if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # for shorter iterations during testing
         
         ### VALIDATION LOOP
         model.eval()
@@ -240,23 +240,24 @@ def train_model(epochs):
 
             ### OPTIONAL -- STOP TRAINING EARLY
             n_val_batches += 1
-            if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
+            break
+#             if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
         
         ### CALCULATE AVERAGE LOSSES PER EPOCH   
-        epoch_train_loss = total_train_loss / n_batches
-        epoch_train_mse_loss = total_train_mse_loss / n_batches
-        epoch_train_nll_loss = total_train_nll_loss / n_batches
-        epoch_train_kl_loss = total_train_kl_loss / n_batches
+        epoch_train_loss = total_train_loss / n_val_batches
+        epoch_train_mse_loss = total_train_mse_loss / n_val_batches
+        epoch_train_nll_loss = total_train_nll_loss / n_val_batches
+        epoch_train_kl_loss = total_train_kl_loss / n_val_batches
 
         train_losses.append(epoch_train_loss) 
         train_mse_losses.append(epoch_train_mse_loss)
         train_nll_losses.append(epoch_train_nll_loss)
         train_kl_losses.append(epoch_train_kl_loss)
 
-        epoch_val_loss = total_val_loss / n_batches
-        epoch_val_mse_loss = total_val_mse_loss / n_batches
-        epoch_val_nll_loss = total_val_nll_loss / n_batches
-        epoch_val_kl_loss = total_val_kl_loss / n_batches
+        epoch_val_loss = total_val_loss / n_val_batches
+        epoch_val_mse_loss = total_val_mse_loss / n_val_batches
+        epoch_val_nll_loss = total_val_nll_loss / n_val_batches
+        epoch_val_kl_loss = total_val_kl_loss / n_val_batches
 
         val_losses.append(epoch_val_loss) 
         val_mse_losses.append(epoch_val_mse_loss)

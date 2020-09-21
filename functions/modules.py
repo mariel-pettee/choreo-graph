@@ -191,7 +191,7 @@ class NRIDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.f_out = Sequential(Linear(self.hidden_size, int(self.node_features/self.seq_len)), ReLU())
+        self.f_out = Sequential(Linear(self.hidden_size, self.hidden_size), ReLU(), Linear(self.hidden_size, self.hidden_size), ReLU(), Linear(self.hidden_size,int(self.node_features/self.seq_len)))
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -243,7 +243,7 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.f_out = f_out
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k-1)] # leave out one for the non-edge
+        self.mlp_list = ModuleList([Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k-1)]) # leave out one for the non-edge
         self.reset_parameters()
 
     def reset_parameters(self):
