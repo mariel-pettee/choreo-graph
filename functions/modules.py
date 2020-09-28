@@ -191,7 +191,10 @@ class NRIDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.f_out = Sequential(Linear(self.hidden_size, self.hidden_size), ReLU(), Linear(self.hidden_size, self.hidden_size), ReLU(), Linear(self.hidden_size,int(self.node_features/self.seq_len)))
+        self.f_out = Sequential(
+            Linear(self.hidden_size, self.hidden_size), ReLU(), 
+            Linear(self.hidden_size, self.hidden_size), ReLU(), 
+            Linear(self.hidden_size,int(self.node_features/self.seq_len)))
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -222,6 +225,7 @@ class NRIDecoder(torch.nn.Module):
             
             ### Final MLP to convert hidden dimension back into node_features
             mu = inputs + self.f_out(h)
+#             mu = inputs + h
 #             print("Average hidden:", torch.mean(h).item())
 #             print("Average f_out(h):", torch.mean(self.f_out(h)).item())
             predictions.append(mu)

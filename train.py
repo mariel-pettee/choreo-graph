@@ -184,11 +184,11 @@ def train_model(epochs):
         ### TRAINING LOOP
         for batch in tqdm(dataloader_train, desc="Train"):
             batch = batch.to(device)
-            print("Batch is size {} -- timesteps for joint 0_x: {}".format(batch.x.size(), batch.x[0,:30:6]))
+#             print("Memory usage before: {:.2f}".format(torch.cuda.memory_cached()/1024/1024/1024))
             
             ### CALCULATE MODEL OUTPUTS
             output, edge_types, logits, probabilities = model(batch)
-
+            
             ### CALCULATE LOSS
             train_mse_loss = mse_loss(output, batch.x.to(device)) # just calculate this for comparison; it's not added to the loss
             train_nll_loss = nll_gaussian(output, batch.x.to(device))
@@ -208,11 +208,10 @@ def train_model(epochs):
             optimizer.zero_grad() # reset the gradients to zero
             train_loss.backward()
             optimizer.step()
-
+            
             ### OPTIONAL -- STOP TRAINING EARLY
             n_batches += 1
-            break
-#             if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # for shorter iterations during testing
+            if (args.batch_limit > 0) and (n_batches >= args.batch_limit): break # for shorter iterations during testing
         
         ### VALIDATION LOOP
         model.eval()
@@ -240,8 +239,7 @@ def train_model(epochs):
 
             ### OPTIONAL -- STOP TRAINING EARLY
             n_val_batches += 1
-            break
-#             if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
+            if (args.batch_limit > 0) and (n_val_batches >= args.batch_limit): break # temporary -- for stopping training early
         
         ### CALCULATE AVERAGE LOSSES PER EPOCH   
         epoch_train_loss = total_train_loss / n_val_batches
@@ -318,10 +316,10 @@ def train_model(epochs):
              'optimizer_state_dict': optimizer.state_dict(),
              'loss': best_loss,
              }, checkpoint_path)
-            print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
+            print("Better val loss achieved -- saved model checkpoint to {}.".format(checkpoint_path), file=log)
             log.flush()
-            print("Better loss achieved -- saved model checkpoint to {}.".format(checkpoint_path))
-
+            print("Better val loss achieved -- saved model checkpoint to {}.".format(checkpoint_path))
+            
     loss_dict = {
     "train_losses": train_losses,
     "train_mse_losses": train_mse_losses,
