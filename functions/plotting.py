@@ -123,6 +123,15 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, skele
                         color="white",
                         lw=lw)[0]
                     lines.append(None)
+                    
+            else: # regular cloud
+                l = ax.plot(
+                np.linspace(segments[i,0,0],segments[i,0,1],2),
+                np.linspace(segments[i,1,0],segments[i,1,1],2),
+                np.linspace(segments[i,2,0],segments[i,2,1],2),
+                alpha=cloud_alpha,
+                lw=lw)[0]
+                lines.append(l)
     return lines
 
 # animate a video of the stick figure.
