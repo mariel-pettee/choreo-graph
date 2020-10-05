@@ -20,19 +20,19 @@ Calling the training script automatically loads the raw data contained in the nu
 
 ## Animations 
 Predictions on a single test batch:
-![](test_batch.gif)
+![](data/animations/test_batch.gif)
 
 Predictions on a test set of 200 timesteps:
-![](test_200.gif)
+![](data/animations/test_200.gif)
 
 Edge type #0 (non-edge):
-![](edgetype0.gif)
+![](data/animations/edgetype0.gif)
 
 Edge type #1:
-![](edgetype1.gif)
+![](data/animations/edgetype1.gif)
 
 Edge type #2:
-![](edgetype2.gif)
+![](data/animations/edgetype2.gif)
 
 Edge type #3:
-![](edgetype3.gif)
+![](data/animations/edgetype3.gif)
