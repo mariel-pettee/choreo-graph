@@ -102,7 +102,7 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, skele
                 custom_colors = ["deeppink","red","blue","green","orange"]
                 if edge_types[i][edge_class] == 1:
                     if edge_opacities is not None and edge_opacities[i,edge_class] > threshold: # and cloud_idxs[i][1] == [10]:
-                        alpha=edge_opacities[i,edge_class]
+                        alpha=0.5 #edge_opacities[i,edge_class]
                         print("Surviving edge: {} | ({} -> {}), i.e. ({} -> {})".format(i,cloud_idxs[i][0], cloud_idxs[i][1],cloud_idxs_names[i][0], cloud_idxs_names[i][1]))
                     else:
                         alpha=cloud_alpha
@@ -123,6 +123,15 @@ def put_lines(ax, segments, color=None, lw=2.5, alpha=None, skeleton=True, skele
                         color="white",
                         lw=lw)[0]
                     lines.append(None)
+                    
+            else: # regular cloud
+                l = ax.plot(
+                np.linspace(segments[i,0,0],segments[i,0,1],2),
+                np.linspace(segments[i,1,0],segments[i,1,1],2),
+                np.linspace(segments[i,2,0],segments[i,2,1],2),
+                alpha=cloud_alpha,
+                lw=lw)[0]
+                lines.append(l)
     return lines
 
 # animate a video of the stick figure.

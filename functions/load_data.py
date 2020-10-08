@@ -3,6 +3,8 @@ from torch_geometric.data import Data
 import numpy as np
 from glob import glob
 import os
+import sys
+sys.path.append('../')
 
 ### PS: See http://www.cs.uu.nl/docs/vakken/mcanim/mocap-manual/site/img/markers.png for detailed marker definitions
 point_labels = ['ARIEL','C7','CLAV','LANK','LBHD','LBSH','LBWT','LELB','LFHD','LFRM','LFSH','LFWT','LHEL','LIEL','LIHAND','LIWR','LKNE','LKNI','LMT1','LMT5','LOHAND','LOWR','LSHN','LTHI','LTOE','LUPA','MBWT','MFWT','RANK','RBHD','RBSH','RBWT','RELB','RFHD','RFRM','RFSH','RFWT','RHEL','RIEL','RIHAND','RIWR','RKNE','RKNI','RMT1','RMT5','ROHAND','ROWR','RSHN','RTHI','RTOE','RUPA','STRN','T10']
@@ -102,7 +104,7 @@ class MarielDataset(torch.utils.data.Dataset):
             print("Reducing joints...")
         else:
             print("Using all joints...")
-        
+
     def __len__(self):
         'Denotes the total number of samples'
         if self.xy_centering: 
@@ -120,12 +122,12 @@ class MarielDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         'Generates one sample of data'  
         edge_index, is_skeleton_edge, reduced_joint_indices = edges(reduced_joints=self.reduced_joints, seq_len=self.seq_len)
-        
+            
         if self.xy_centering == True: 
             data = self.data[1] # choose index 1, for the (x,y)-centered phrases
         else: 
             data = self.data[0] # choose index 0, for data without (x,y)-centering
-        
+
         if self.reduced_joints == True: 
             data = data[:,reduced_joint_indices,:] # reduce number of joints if desired
             
@@ -133,16 +135,16 @@ class MarielDataset(torch.utils.data.Dataset):
             # non-overlapping phrases
             index = index*self.seq_len
             sequence = data[index:index+self.seq_len]
-            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
+            prediction_target = data[index:index+self.seq_len+self.predicted_timesteps]
         else: 
             # overlapping phrases
             sequence = data[index:index+self.seq_len]
-            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
+            prediction_target = data[index:index+self.seq_len+self.predicted_timesteps]
 
         sequence = np.transpose(sequence, [1,0,2]) # put n_joints first
         sequence = sequence.reshape((data.shape[1],self.n_dim*self.seq_len)) # flatten n_dim*seq_len into one dimension (i.e. node feature)
         prediction_target = np.transpose(prediction_target, [1,0,2]) # put n_joints first
-        prediction_target = prediction_target.reshape((data.shape[1],self.n_dim*self.predicted_timesteps)) # flatten n_dim*predicted_timesteps into one dimension (i.e. node feature) per node (data.shape[1] = number of nodes)
+        prediction_target = prediction_target.reshape((data.shape[1],self.n_dim*(self.seq_len+self.predicted_timesteps))) 
 
         # Convert to torch objects
         sequence = torch.Tensor(sequence)
@@ -194,8 +196,6 @@ def load_data(pattern="data/mariel_*.npy"):
         datasets[ds][:,:,:2] -= 1.0
         datasets_centered[ds] = datasets[ds].copy()
         datasets_centered[ds][:,:,:2] -= datasets[ds][:,:,:2].mean(axis=1,keepdims=True)
-
-    low,hi = np.quantile(ds_all, [0.01,0.99], axis=(0,1))
     
     ### Calculate velocities (first velocity is always 0)
     velocities = np.vstack([np.zeros((1,53,3)),np.array([35*(ds_all[t+1,:,:] - ds_all[t,:,:]) for t in range(len(ds_all)-1)])]) # (delta_x/y/z per frame) * (35 frames/sec)
@@ -204,6 +204,27 @@ def load_data(pattern="data/mariel_*.npy"):
     ds_all = np.dstack([ds_all,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
     ds_all_centered = np.dstack([ds_all_centered,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
 
+#     for data in [ds_all, ds_all_centered]:
+#         # Normalize locations & velocities (separately) to [-1, 1]
+#         loc_min = np.min(data[:,:,:3])
+#         loc_max = np.max(data[:,:,:3])
+#         vel_min = np.min(data[:,:,3:])
+#         vel_max = np.max(data[:,:,3:])
+#         print("loc_min:",loc_min,"loc_max:",loc_max)
+#         print("vel_min:",vel_min,"vel_max:",vel_max)
+#         data[:,:,:3] = (data[:,:,:3] - loc_min) * 2 / (loc_max - loc_min) - 1
+#         data[:,:,3:] = (data[:,:,3:] - vel_min) * 2 / (vel_max - vel_min) - 1
+    
+    ### Hack it so we use the same normalizations as NRI
+    loc_min= -0.48407222404504685 
+    loc_max= 0.9019995000366642
+    vel_min= -44.021016977932554 
+    vel_max= 25.465943269505793
+    print("loc_min:",loc_min,"loc_max:",loc_max)
+    print("vel_min:",vel_min,"vel_max:",vel_max)
+    ds_all_centered[:,:,:3] = (ds_all_centered[:,:,:3] - loc_min) * 2 / (loc_max - loc_min) - 1
+    ds_all_centered[:,:,3:] = (ds_all_centered[:,:,3:] - vel_min) * 2 / (vel_max - vel_min) - 1
+    
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
 def edges(reduced_joints, seq_len):

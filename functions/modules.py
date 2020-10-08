@@ -3,7 +3,7 @@ import torch
 from torch.nn import Sequential, Linear, ReLU
 from torch_geometric.nn import MessagePassing, GatedGraphConv
 from torch_geometric.utils import add_self_loops, degree
-from torch.nn import Parameter, ModuleList
+from torch.nn import Parameter, ModuleList, BatchNorm1d
 from torch.autograd import Variable
 import torch.nn.functional as F
 from .functions import *
@@ -60,21 +60,33 @@ class NRIEncoder(torch.nn.Module):
         self.node_embedding_dim = node_embedding_dim
         self.edge_embedding_dim = edge_embedding_dim
         self.skip_connection = skip_connection
-        self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU())
+        self.node_embedding_eqn_5 = Sequential(Linear(self.node_features, self.node_embedding_dim), ReLU(), Linear(self.node_embedding_dim, self.node_embedding_dim), ReLU(), BatchNorm1d(self.node_embedding_dim, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True))
         self.mlp_eqn_6 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
                       ReLU(), 
-                      Linear(self.hidden_size, self.node_embedding_dim))
+                      Linear(self.hidden_size, self.node_embedding_dim),
+                      ReLU(), 
+                      BatchNorm1d(self.node_embedding_dim, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True))
         self.mlp_eqn_7 = Sequential(Linear(self.node_embedding_dim, self.hidden_size), 
                   ReLU(), 
-                  Linear(self.hidden_size, self.node_embedding_dim))
+                  Linear(self.hidden_size, self.node_embedding_dim),
+                  ReLU(), 
+                  BatchNorm1d(self.node_embedding_dim, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True))
         if self.skip_connection:
             self.mlp_eqn_8 = Sequential(Linear(4*self.node_embedding_dim, self.hidden_size), 
                           ReLU(), 
-                          Linear(self.hidden_size, self.edge_embedding_dim))
+                          Linear(self.hidden_size, self.hidden_size),
+                          ReLU(),
+                          BatchNorm1d(self.hidden_size, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+                          Linear(self.hidden_size, self.edge_embedding_dim),
+                                       )
         else:
             self.mlp_eqn_8 = Sequential(Linear(2*self.node_embedding_dim, self.hidden_size), 
                           ReLU(), 
-                          Linear(self.hidden_size, self.edge_embedding_dim))
+                          Linear(self.hidden_size, self.hidden_size),
+                          ReLU(),
+                          BatchNorm1d(self.hidden_size, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+                          Linear(self.hidden_size, self.edge_embedding_dim),
+                                       )
         self.graph_conv = NRIGraphConv(in_channels=self.node_embedding_dim, 
                                         out_channels=self.node_embedding_dim, 
                                         nn=self.mlp_eqn_6, nn_2=self.mlp_eqn_7, 
@@ -179,7 +191,10 @@ class NRIDecoder(torch.nn.Module):
         self.edge_embedding_dim = edge_embedding_dim
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.f_out = Sequential(Linear(self.hidden_size, int(self.node_features/self.seq_len)), ReLU())
+        self.f_out = Sequential(
+            Linear(self.hidden_size, self.hidden_size), ReLU(), 
+            Linear(self.hidden_size, self.hidden_size), ReLU(), 
+            Linear(self.hidden_size,int(self.node_features/self.seq_len)))
         self.rnn_graph_conv = NRIDecoder_Recurrent(device=self.device,
                                                    node_features=self.node_features, 
                                                    seq_len=self.seq_len, 
@@ -202,19 +217,17 @@ class NRIDecoder(torch.nn.Module):
         
         ### Loop over timesteps of x, redefining h each time. Note that predicted_timesteps must be < seq_len.
         for timestep in range(n_timesteps):
-#             print(timestep)
             if timestep < (self.seq_len - self.predicted_timesteps):
-#                 print("inputs")
                 inputs = x[:,timestep,:] # feed in real data up until transition to prediction-only
             else:
-#                 print("predictions")
                 inputs = predictions[timestep-1] # feed in previous prediction
             h = self.rnn_graph_conv(inputs, edge_index, z, h)
             
             ### Final MLP to convert hidden dimension back into node_features
             mu = inputs + self.f_out(h)
-#             print("hidden:", h)
-#             print("f_out(h):", self.f_out(h))
+#             mu = inputs + h
+#             print("Average hidden:", torch.mean(h).item())
+#             print("Average f_out(h):", torch.mean(self.f_out(h)).item())
             predictions.append(mu)
 
         mus = torch.stack(predictions, dim=1)
@@ -234,7 +247,7 @@ class NRIDecoder_Recurrent(MessagePassing):
         self.f_out = f_out
         self.dynamic_graph = dynamic_graph
         self.encoder = encoder
-        self.mlp_list = [Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k)]
+        self.mlp_list = ModuleList([Sequential(Linear(2*node_features, hidden_size), ReLU(), Linear(hidden_size, hidden_size)) for i in range(k-1)]) # leave out one for the non-edge
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -250,13 +263,14 @@ class NRIDecoder_Recurrent(MessagePassing):
         m = self.propagate(x=self.f_out(h), edge_index=edge_index, z=z, size=None)
         h = self.rnn(x, m)
         return h
-
+    
     def message(self, x_i, x_j, z):
         edge_features = torch.cat([x_i,x_j], dim=1).detach().clone()
         if torch.cuda.is_available() and self.device != 'cpu':
-            k_list = [z[:,i].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+            # Note: use i+1 to skip the first edge type
+            k_list = [z[:,i+1].view(-1, 1)*layer.cuda()(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         else:
-            k_list = [z[:,i].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
+            k_list = [z[:,i+1].view(-1, 1)*layer(edge_features) for (i, layer) in enumerate(self.mlp_list)] # element-wise multiplication
         stack = torch.stack(k_list, dim=1)
         output = stack.sum(dim=1) # sum over k
         return output
