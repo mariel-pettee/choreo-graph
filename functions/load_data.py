@@ -135,16 +135,16 @@ class MarielDataset(torch.utils.data.Dataset):
             # non-overlapping phrases
             index = index*self.seq_len
             sequence = data[index:index+self.seq_len]
-            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
+            prediction_target = data[index:index+self.seq_len+self.predicted_timesteps]
         else: 
             # overlapping phrases
             sequence = data[index:index+self.seq_len]
-            prediction_target = data[index+self.seq_len:index+self.seq_len+self.predicted_timesteps]
+            prediction_target = data[index:index+self.seq_len+self.predicted_timesteps]
 
         sequence = np.transpose(sequence, [1,0,2]) # put n_joints first
         sequence = sequence.reshape((data.shape[1],self.n_dim*self.seq_len)) # flatten n_dim*seq_len into one dimension (i.e. node feature)
         prediction_target = np.transpose(prediction_target, [1,0,2]) # put n_joints first
-        prediction_target = prediction_target.reshape((data.shape[1],self.n_dim*self.predicted_timesteps)) # flatten n_dim*predicted_timesteps into one dimension (i.e. node feature) per node (data.shape[1] = number of nodes)
+        prediction_target = prediction_target.reshape((data.shape[1],self.n_dim*(self.seq_len+self.predicted_timesteps))) 
 
         # Convert to torch objects
         sequence = torch.Tensor(sequence)

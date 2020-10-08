@@ -320,19 +320,19 @@ def train_model(epochs):
             log.flush()
             print("Better val loss achieved -- saved model checkpoint to {}.".format(checkpoint_path))
             
-    loss_dict = {
-    "train_losses": train_losses,
-    "train_mse_losses": train_mse_losses,
-    "train_nll_losses": train_nll_losses,
-    "train_kl_losses": train_kl_losses,
-    "val_losses": val_losses,
-    "val_mse_losses": val_mse_losses,
-    "val_nll_losses": val_nll_losses,
-    "val_kl_losses": val_kl_losses,
-    }
+        loss_dict = {
+        "train_losses": train_losses,
+        "train_mse_losses": train_mse_losses,
+        "train_nll_losses": train_nll_losses,
+        "train_kl_losses": train_kl_losses,
+        "val_losses": val_losses,
+        "val_mse_losses": val_mse_losses,
+        "val_nll_losses": val_nll_losses,
+        "val_kl_losses": val_kl_losses,
+        }
 
-    with open(os.path.join(save_folder,'losses.json'), 'w') as f:
-	    json.dump(loss_dict, f)
+        with open(os.path.join(save_folder,'losses.json'), 'w') as f:
+            json.dump(loss_dict, f)
 
 train_model(epochs=args.epochs)
 
