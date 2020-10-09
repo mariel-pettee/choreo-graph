@@ -3,7 +3,7 @@ Mariel Pettee, Santiago Miret, Somdeb Majumdar, Marcel Nassar
 
 This is a codebase for applying GNNs to choreography. Our model, based on Neural Relational Inference (https://arxiv.org/abs/1802.04687; https://github.com/ethanfetaya/NRI), is implemented in Pytorch Geometric. The model sorts the fully-connected directed edges of the input data into discrete learned categories of edge types based on similiarites in their interactions and uses this latent graph representation to predict the future dynamics of the system. 
 
-Dancers may find this work useful to their practice because of the model's ability to identify a small number of edge connections within the body that are important for predicting future dynamics. By isolating the top (or bottom) edges in each category, ranked by normalized log-probability, dancers can gain new insight into their most and least important cross-body connections. By comparing edges between categories, they can also learn some of the various interation dynamics that characterize their motion.
+Dancers may find this work useful to their practice because of the model's ability to identify a small number of edge connections within the body that are important for predicting future dynamics. By isolating the top (or bottom) edges in each category, ranked by normalized log-probability, dancers can gain new insight into their most and least important cross-body connections. By comparing edges between categories, they can also learn some of the various interaction dynamics that characterize their motion.
 
 ## Dependencies
 - torch == 1.4.0
