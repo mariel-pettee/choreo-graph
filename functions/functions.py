@@ -9,25 +9,12 @@ import json
 import time
 
 ### LOSS FUNCTIONS ########################################################
-
-def gaussian_neg_log_likelihood(x, mu, sigma):
-    gaussian = MultivariateNormal(x - mu, 2*sigma**2*torch.eye(x.size(1), device=x.device))
-    return gaussian.log_prob(gaussian.sample()).sum() / (x.size(0) * x.size(1))
-
-# def gaussian_neg_log_likelihood(x, mu, sigma):
-#     print(x.shape)
-#     print(mu.shape)
-#     sum_gaussian = torch.sum((x - mu)**2, axis=0)/2*sigma**2
-#     constant = (len(sum_gaussian)/2)*np.log(2*np.pi*sigma**2)
-#     return sum_gaussian + constant
+### These functions came from NRI's codebase: https://github.com/ethanfetaya/NRI/blob/master/utils.py
 
 def nll_gaussian(preds, target, variance=5e-5, add_const=False):
     neg_log_p = ((preds - target) ** 2 / (2 * variance))
-#     print("preds - target: Min:{:.6f} Max:{:.6f}".format((preds-target).min().item(), (preds-target).max().item()))
-#     print("numerator:", ((preds - target) ** 2).sum().item())
-#     print("neg_log_p sum:",neg_log_p.sum().item())
     if add_const:
-        const = 0.5 * np.log(2 * np.pi * variance) # shouldn't this be multiplied by n?
+        const = 0.5 * np.log(2 * np.pi * variance)
         neg_log_p += const
     return neg_log_p.sum() / (target.size(0) * target.size(1))
 
