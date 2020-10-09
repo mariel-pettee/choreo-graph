@@ -8,7 +8,6 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from .functions import *
 from torch_geometric.data import Data
-# import pdb; pdb.set_trace()
 import time
 
 class NRI(torch.nn.Module):
@@ -225,9 +224,6 @@ class NRIDecoder(torch.nn.Module):
             
             ### Final MLP to convert hidden dimension back into node_features
             mu = inputs + self.f_out(h)
-#             mu = inputs + h
-#             print("Average hidden:", torch.mean(h).item())
-#             print("Average f_out(h):", torch.mean(self.f_out(h)).item())
             predictions.append(mu)
 
         mus = torch.stack(predictions, dim=1)

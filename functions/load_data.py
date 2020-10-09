@@ -204,26 +204,16 @@ def load_data(pattern="data/mariel_*.npy"):
     ds_all = np.dstack([ds_all,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
     ds_all_centered = np.dstack([ds_all_centered,velocities]) # stack along the 3rd dimension, i.e. "depth-wise"
 
-#     for data in [ds_all, ds_all_centered]:
-#         # Normalize locations & velocities (separately) to [-1, 1]
-#         loc_min = np.min(data[:,:,:3])
-#         loc_max = np.max(data[:,:,:3])
-#         vel_min = np.min(data[:,:,3:])
-#         vel_max = np.max(data[:,:,3:])
-#         print("loc_min:",loc_min,"loc_max:",loc_max)
-#         print("vel_min:",vel_min,"vel_max:",vel_max)
-#         data[:,:,:3] = (data[:,:,:3] - loc_min) * 2 / (loc_max - loc_min) - 1
-#         data[:,:,3:] = (data[:,:,3:] - vel_min) * 2 / (vel_max - vel_min) - 1
-    
-    ### Hack it so we use the same normalizations as NRI
-    loc_min= -0.48407222404504685 
-    loc_max= 0.9019995000366642
-    vel_min= -44.021016977932554 
-    vel_max= 25.465943269505793
-    print("loc_min:",loc_min,"loc_max:",loc_max)
-    print("vel_min:",vel_min,"vel_max:",vel_max)
-    ds_all_centered[:,:,:3] = (ds_all_centered[:,:,:3] - loc_min) * 2 / (loc_max - loc_min) - 1
-    ds_all_centered[:,:,3:] = (ds_all_centered[:,:,3:] - vel_min) * 2 / (vel_max - vel_min) - 1
+    for data in [ds_all, ds_all_centered]:
+        # Normalize locations & velocities (separately) to [-1, 1]
+        loc_min = np.min(data[:,:,:3])
+        loc_max = np.max(data[:,:,:3])
+        vel_min = np.min(data[:,:,3:])
+        vel_max = np.max(data[:,:,3:])
+        print("loc_min:",loc_min,"loc_max:",loc_max)
+        print("vel_min:",vel_min,"vel_max:",vel_max)
+        data[:,:,:3] = (data[:,:,:3] - loc_min) * 2 / (loc_max - loc_min) - 1
+        data[:,:,3:] = (data[:,:,3:] - vel_min) * 2 / (vel_max - vel_min) - 1
     
     return ds_all, ds_all_centered, datasets, datasets_centered, ds_counts
 
