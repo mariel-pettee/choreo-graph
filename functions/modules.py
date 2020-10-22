@@ -12,9 +12,10 @@ import time
 
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len, predicted_timesteps):
+    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len, predicted_timesteps, ablation_edge_index = -1):
         super(NRI, self).__init__()
         self.device = device
+        self.ablation_edge_index = ablation_edge_index
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
         self.edge_features = edge_features
@@ -46,6 +47,11 @@ class NRI(torch.nn.Module):
     def forward(self, batch):
         edge_embedding = self.encoder(batch)
         z = torch.nn.functional.gumbel_softmax(edge_embedding, tau=0.5, hard=True)
+        if self.ablation_edge_index != -1:
+            ### Only use one specified edge type for evaluation
+            z_new = torch.zeros_like(z)
+            z_new[:,self.ablation_edge_index] = z[:,self.ablation_edge_index]
+            z = z_new
         output = self.decoder(batch.x, batch.edge_index, z)
         return output, z, edge_embedding, F.softmax(edge_embedding, dim=-1)
     
