@@ -11,12 +11,12 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    --name="fulltraining_lr5e-7_sparsity",
+    --name="fulltraining_lr1e-7_sparsity",
     --epochs=200,
     --batch_size=2,
     --seq_len=49,
     --predicted_timesteps=10,
-    --lr=5e-7,
+    --lr=1e-7,
     --batch_limit=0,
     --sparsity_prior, 
     ]
