@@ -12,10 +12,11 @@ import time
 
 class NRI(torch.nn.Module):
     """Implementation of NRI with Pytorch Geometric"""
-    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len, predicted_timesteps, ablation_edge_index = -1):
+    def __init__(self, device, node_features, edge_features, hidden_size, skip_connection, node_embedding_dim, edge_embedding_dim, dynamic_graph, seq_len, predicted_timesteps, ablation_edge_index = -1, threshold=0):
         super(NRI, self).__init__()
         self.device = device
         self.ablation_edge_index = ablation_edge_index
+        self.threshold = threshold
         self.node_features = node_features
         self.node_embedding_dim = node_embedding_dim
         self.edge_features = edge_features
@@ -50,7 +51,25 @@ class NRI(torch.nn.Module):
         if self.ablation_edge_index != -1:
             ### Only use one specified edge type for evaluation
             z_new = torch.zeros_like(z)
-            z_new[:,self.ablation_edge_index] = z[:,self.ablation_edge_index]
+            if self.threshold > 0:
+                threshold = self.threshold # use the top (1-x)% of edges
+                threshold_point = np.percentile(F.softmax(edge_embedding, dim=-1).detach().cpu().numpy()[:,self.ablation_edge_index],threshold) 
+                probs = F.softmax(edge_embedding, dim=-1)[:,self.ablation_edge_index]
+                mask = torch.as_tensor((probs - threshold_point) > 0, dtype=torch.int32) 
+                print("Using the {} edges in the top {}% of edge type {}.".format(mask.sum(), 100-threshold, self.ablation_edge_index))
+            else: 
+                mask = torch.ones(len(z))
+            z_new[:,self.ablation_edge_index] = z[:,self.ablation_edge_index]*mask.cuda()
+            z = z_new
+        elif self.ablation_edge_index == -1 and self.threshold > 0:
+            threshold = self.threshold # use the top (100-x)% of edges
+            z_new = torch.zeros_like(z)
+            for i in range(self.edge_embedding_dim):
+                threshold_point = np.percentile(F.softmax(edge_embedding, dim=-1).detach().cpu().numpy()[:,i],threshold) 
+                probs = F.softmax(edge_embedding, dim=-1)[:,i]
+                mask = torch.as_tensor((probs - threshold_point) > 0, dtype=torch.int32) 
+                z_new[:,i] = z[:,i]*mask.cuda()
+                print("Using the {} edges in the top {}% of edge type {}.".format(mask.sum(), 100-threshold, i))
             z = z_new
         output = self.decoder(batch.x, batch.edge_index, z)
         return output, z, edge_embedding, F.softmax(edge_embedding, dim=-1)
