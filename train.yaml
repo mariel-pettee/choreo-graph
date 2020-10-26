@@ -11,16 +11,14 @@ spec:
   containers:
   - name: nri-train
     command: ["python", "-u", "train.py", 
-    "--name=aggrmean_seq10_pred2",
-    "--epochs=20",
-    "--batch_size=1",
-#     "--batch_limit=10",
-#     "--hidden_size=256",
-    "--node_embedding_dim=60", # or 6*seq_len for small seq_len
-#     "--edge_embedding_dim=2", # this is k, i.e. number of edge types
-    "--seq_len=10",
-    "--predicted_timesteps=2", # make sure this is less than seq_len
-#     "--skip_connection",
+    --name="fulltraining_lr5e-7_sparsity",
+    --epochs=200,
+    --batch_size=2,
+    --seq_len=49,
+    --predicted_timesteps=10,
+    --lr=5e-7,
+    --batch_limit=0,
+    --sparsity_prior, 
     ]
     # command: ["sleep", "infinity"]
     image: amr-registry.caas.intel.com/aipg/mpettee-pytorch-geometric
